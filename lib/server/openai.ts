@@ -22,4 +22,9 @@ export function getIntimacyModel() {
   return env.OPENAI_INTIMACY_MODEL || env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
 }
 
+export function getTtsModel() {
+  const env = getServerEnv();
+  return env.OPENAI_TTS_MODEL || "tts-1";
+}
+
 

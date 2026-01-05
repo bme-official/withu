@@ -7,6 +7,7 @@ import { getClientIp } from "@/lib/server/request";
 import { TtsSchema } from "@/lib/server/validators";
 import { assertSessionToken, insertEvents } from "@/lib/server/db";
 import { corsHeaders } from "@/lib/server/cors";
+import { getOpenAI, getTtsModel } from "@/lib/server/openai";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -18,12 +19,35 @@ export async function POST(req: NextRequest) {
     const parsed = TtsSchema.safeParse(body);
     if (!parsed.success) return errorJson(400, "invalid_body");
 
-    const { sessionId, sessionToken } = parsed.data;
+    const { sessionId, sessionToken, text } = parsed.data;
     await assertSessionToken(sessionId, sessionToken);
-    await insertEvents(sessionId, [{ type: "tts_mode", meta: { mode: "client_web_speech" } }]);
+    rateLimitOrThrow(`tts_session:${sessionId}`, 40, 60_000);
 
-    // Future extension: return audio url/binary here
-    return json({ ok: true, mode: "client_web_speech" }, { status: 200, headers: cors });
+    const model = getTtsModel();
+    const voice = "alloy";
+    const input = String(text || "").slice(0, 2000);
+    if (!input.trim()) return errorJson(400, "empty_text");
+
+    const t0 = performance.now();
+    const speech = await getOpenAI().audio.speech.create({
+      model,
+      voice,
+      input,
+      format: "mp3",
+    } as any);
+    const buf = Buffer.from(await (speech as any).arrayBuffer());
+    const ttsMs = Math.round(performance.now() - t0);
+
+    await insertEvents(sessionId, [{ type: "tts_done", meta: { mode: "server_openai", model, voice, ttsMs, bytes: buf.length } }]);
+
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        ...cors,
+        "content-type": "audio/mpeg",
+        "cache-control": "no-store",
+      },
+    });
   } catch (e) {
     // @ts-expect-error: from rateLimitOrThrow
     const status = e?.status ?? 500;

@@ -9,7 +9,7 @@ export type ApiClient = {
   log(type: string, meta?: unknown): Promise<void>;
   asr(audio: Blob): Promise<{ text: string }>;
   chat(userText: string, inputMode: "voice" | "text"): Promise<{ assistantText: string; intimacy: { level: number; xp: number; nextXp: number | null; delta: number } | null }>;
-  tts(text: string): Promise<{ mode: string }>;
+  ttsAudio(text: string): Promise<Blob>;
 };
 
 function safeJsonParse(text: string): unknown {
@@ -105,12 +105,18 @@ export function createApiClient(baseUrl: string, siteId: string): ApiClient {
         body: JSON.stringify({ sessionId: state.sessionId, sessionToken: state.sessionToken, userText, inputMode }),
       });
     },
-    async tts(text: string) {
+    async ttsAudio(text: string) {
       if (!state.sessionId || !state.sessionToken) throw new Error("missing session");
-      return await requestJson<{ mode: string }>("/api/tts", {
+      const res = await fetch(`${baseUrl}/api/tts`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ sessionId: state.sessionId, sessionToken: state.sessionToken, text }),
       });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`HTTP ${res.status} /api/tts ${t}`);
+      }
+      return await res.blob();
     },
   };
 }

@@ -105,6 +105,7 @@ async function main() {
   const overrideAvatarUrl = script.dataset.avatarUrl || null;
   const userIdStorageKey = `${STORAGE_KEYS.userIdPrefix}${siteId}`;
   const layout = (script.dataset.layout || script.dataset.mode || "bubble") === "page" ? "page" : "bubble";
+  const ttsMode = (script.dataset.tts || "auto").toLowerCase(); // auto|webspeech|server
 
   let state: WidgetState = "idle";
   let inFlight = false;
@@ -114,6 +115,33 @@ async function main() {
   let mode: "voice" | "text" = "voice";
   let ttsVoiceHint: string | null = null;
   let layoutMode: "bubble" | "page" = layout;
+  let preferServerTts = ttsMode === "server";
+
+  async function speakWithServerTts(text: string): Promise<{ ttsMs: number } | null> {
+    try {
+      const t0 = performance.now();
+      const blob = await api.ttsAudio(text);
+      const url = URL.createObjectURL(blob);
+      try {
+        const audio = new Audio(url);
+        audio.preload = "auto";
+        audio.volume = 1.0;
+        const playPromise = audio.play();
+        if (playPromise && typeof (playPromise as any).catch === "function") {
+          await playPromise;
+        }
+        await new Promise<void>((resolve) => {
+          audio.onended = () => resolve();
+          audio.onerror = () => resolve();
+        });
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      return { ttsMs: msSince(t0) };
+    } catch {
+      return null;
+    }
+  }
 
   function setState(next: WidgetState) {
     state = next;
@@ -173,8 +201,11 @@ async function main() {
 
   async function speak(text: string) {
     // speaking中はVADが絶対に動かないよう、state遷移とstopが先
+    if (ttsMode === "webspeech") return await speakWithWebSpeech(text, ttsVoiceHint);
+    if (preferServerTts || ttsMode === "server") return await speakWithServerTts(text);
     const res = await speakWithWebSpeech(text, ttsVoiceHint);
-    return res;
+    if (res) return res;
+    return await speakWithServerTts(text);
   }
 
   async function ensureVoiceListening(reason: string) {
@@ -295,9 +326,12 @@ async function main() {
         } catch {}
         vad = null;
         setState("speaking");
-        const res = await speak("テストです。聞こえますか？");
-        if (!res) {
-          ui.setError("読み上げができません。ブラウザの『サイトの音声』がミュート/ブロックされていないか確認してください。");
+        // Force server TTS on test to bypass SpeechSynthesis issues
+        const res = await speakWithServerTts("テストです。聞こえますか？");
+        if (res) {
+          preferServerTts = true;
+        } else {
+          ui.setError("音が出ません。タブ/サイトのミュート、OSの出力先、ブラウザの音声許可を確認してください。");
         }
       } finally {
         inFlight = false;

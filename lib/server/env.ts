@@ -8,6 +8,7 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(20),
   OPENAI_CHAT_MODEL: z.string().optional(),
   OPENAI_INTIMACY_MODEL: z.string().optional(),
+  OPENAI_TTS_MODEL: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof EnvSchema>;
