@@ -85,6 +85,52 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     .page .status { display:none; }
     .page .modeTabs { gap: 10px; }
     .page .tab { padding: 8px 12px; font-size: 13px; }
+    /* Page layout: mobile is single column; desktop becomes 2 columns in text mode */
+    .page .panel.open {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto 1fr auto;
+      grid-template-areas:
+        "header"
+        "hero"
+        "log"
+        "footer";
+    }
+    .page .header { grid-area: header; }
+    .page .hero { grid-area: hero; }
+    .page .log { grid-area: log; }
+    .page .footer { grid-area: footer; }
+
+    /* Voice mode: hero-centered single column even on desktop */
+    .page .panel.voiceOnly.open {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto;
+      grid-template-areas:
+        "header"
+        "hero"
+        "footer";
+    }
+
+    @media (min-width: 900px) {
+      .page .panel.open:not(.voiceOnly) {
+        grid-template-columns: 380px 1fr;
+        grid-template-rows: auto 1fr auto;
+        grid-template-areas:
+          "header header"
+          "hero log"
+          "hero footer";
+      }
+      .page .hero {
+        height: 100%;
+        justify-content: flex-start;
+        padding-top: 36px;
+        border-bottom: none;
+        border-right: 1px solid rgba(0,0,0,0.06);
+        background: #f9fafb;
+      }
+      .page .log { padding: 18px; }
+      .page .footer { padding: 18px; }
+    }
     .header {
       display:flex; align-items:center; justify-content:space-between;
       padding: 12px 12px;
@@ -462,6 +508,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   function applyVisibility() {
     const showHistory = currentMode === "text";
     panel.classList.toggle("hideLog", !showHistory);
+    panel.classList.toggle("voiceOnly", currentMode === "voice");
     // in voice mode, hide text input completely
     textRow.style.display = currentMode === "text" ? "flex" : "none";
     muteBtn.style.display = currentMode === "voice" ? "inline-flex" : "none";

@@ -165,7 +165,9 @@ export async function POST(req: NextRequest) {
     const chatResp = await getOpenAI().chat.completions.create({
       model,
       messages: chatMessages,
-      temperature: 0.2,
+      temperature: 0.45,
+      presence_penalty: 0.2,
+      frequency_penalty: 0.2,
     });
     const assistantText = (chatResp.choices?.[0]?.message?.content ?? "").trim();
     const llmMs = msSince(t0);
