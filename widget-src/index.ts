@@ -27,7 +27,7 @@ function safeErr(e: unknown): string {
   return String(e);
 }
 
-async function speakWithWebSpeech(text: string): Promise<{ ttsMs: number } | null> {
+async function speakWithWebSpeech(text: string, voiceHint: string | null): Promise<{ ttsMs: number } | null> {
   if (typeof window === "undefined") return null;
   if (!("speechSynthesis" in window)) return null;
   return await new Promise((resolve) => {
@@ -36,6 +36,17 @@ async function speakWithWebSpeech(text: string): Promise<{ ttsMs: number } | nul
     ut.lang = document.documentElement.lang || "ja-JP";
     ut.rate = 1.0;
     ut.pitch = 1.0;
+    if (voiceHint) {
+      try {
+        // Note: getVoices() may return empty on first call in some browsers; this is best-effort.
+        const voices = window.speechSynthesis.getVoices?.() ?? [];
+        const v =
+          voices.find((vv) => vv.name === voiceHint) ??
+          voices.find((vv) => vv.lang === voiceHint) ??
+          voices.find((vv) => vv.name.includes(voiceHint) || vv.lang.includes(voiceHint));
+        if (v) ut.voice = v;
+      } catch {}
+    }
     ut.onend = () => resolve({ ttsMs: msSince(t0) });
     ut.onerror = () => resolve({ ttsMs: msSince(t0) });
     try {
@@ -57,18 +68,23 @@ async function main() {
   const baseUrl = new URL(script.src).origin;
   const siteId = script.dataset.siteId || "unknown";
   const api = createApiClient(baseUrl, siteId);
+  const overrideDisplayName = script.dataset.displayName || null;
+  const overrideAvatarUrl = script.dataset.avatarUrl || null;
+  const userIdStorageKey = `${STORAGE_KEYS.userIdPrefix}${siteId}`;
 
   let state: WidgetState = "idle";
   let inFlight = false;
   let vad: ReturnType<typeof createVad> | null = null;
   let stream: MediaStream | null = null;
+  let mode: "voice" | "text" = "voice";
+  let ttsVoiceHint: string | null = null;
 
   function setState(next: WidgetState) {
     state = next;
     ui.setState(next);
     ui.setStopEnabled(next === "listening");
-    ui.setStartEnabled(next === "idle" && hasConsent());
-    ui.setTextFallbackEnabled(next === "idle");
+    ui.setStartEnabled(next === "idle" && hasConsent() && mode === "voice");
+    ui.setTextFallbackEnabled(next === "idle" && mode === "text");
   }
 
   function hasConsent() {
@@ -77,7 +93,23 @@ async function main() {
 
   function ensureConsentUi() {
     ui.setConsentVisible(!hasConsent());
-    ui.setStartEnabled(hasConsent() && state === "idle");
+    ui.setStartEnabled(hasConsent() && state === "idle" && mode === "voice");
+  }
+
+  function stopVoicePipeline() {
+    try {
+      vad?.stop();
+    } catch {}
+    vad = null;
+    try {
+      stream?.getTracks().forEach((t) => t.stop());
+    } catch {}
+    stream = null;
+    try {
+      window.speechSynthesis?.cancel?.();
+    } catch {}
+    inFlight = false;
+    setState("idle");
   }
 
   function stopAll(phase: string, message?: string) {
@@ -98,9 +130,28 @@ async function main() {
     void api.log("error", { phase, message: message ?? null });
   }
 
+  async function speak(text: string) {
+    // speaking中はVADが絶対に動かないよう、state遷移とstopが先
+    const res = await speakWithWebSpeech(text, ttsVoiceHint);
+    return res;
+  }
+
   const ui = createUi({
     onToggleOpen(open) {
       if (open) void api.log("widget_open");
+      ensureConsentUi();
+    },
+    onSelectMode(nextMode) {
+      mode = nextMode;
+      ui.setMode(mode);
+      ui.setError(null);
+      if (mode === "text") {
+        // safety: switching mode stops voice pipeline
+        stopVoicePipeline();
+      } else {
+        // voice mode: keep idle; start is enabled only after consent
+        setState("idle");
+      }
       ensureConsentUi();
     },
     onAcceptConsent() {
@@ -115,6 +166,10 @@ async function main() {
     },
     async onStart() {
       ui.setError(null);
+      if (mode !== "voice") {
+        ui.setError("音声モードに切り替えてからStartしてください。");
+        return;
+      }
       if (!hasConsent()) {
         ui.setConsentVisible(true);
         ui.setError("音声開始には同意が必要です。");
@@ -127,6 +182,8 @@ async function main() {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (e) {
+        mode = "text";
+        ui.setMode("text");
         stopAll("mic_permission", "マイクが利用できません。テキスト入力をご利用ください。");
         return;
       }
@@ -165,15 +222,16 @@ async function main() {
             ui.appendMessage("user", userText);
 
             const llmT0 = performance.now();
-            const { assistantText } = await api.chat(userText);
+            const { assistantText, intimacy } = await api.chat(userText, "voice");
             void api.log("llm_done", { llmMs: msSince(llmT0) });
 
             ui.appendMessage("assistant", assistantText);
+            ui.setIntimacy(intimacy?.level ?? null);
             setState(reduceState(state, { type: "LLM_DONE" }));
 
             const ttsT0 = performance.now();
             void api.log("tts_start");
-            const res = await speakWithWebSpeech(assistantText);
+            const res = await speak(assistantText);
             void api.log("tts_end", { ttsMs: res?.ttsMs ?? msSince(ttsT0) });
 
             setState(reduceState(state, { type: "TTS_END" }));
@@ -196,6 +254,10 @@ async function main() {
     },
     async onSendText(text) {
       ui.setError(null);
+      if (mode !== "text") {
+        ui.setError("テキストモードに切り替えて送信してください。");
+        return;
+      }
       if (inFlight) return;
       if (!api.sessionId) {
         ui.setError("セッション初期化中です。少し待ってからもう一度お試しください。");
@@ -214,15 +276,15 @@ async function main() {
       try {
         ui.appendMessage("user", text);
         const llmT0 = performance.now();
-        const { assistantText } = await api.chat(text);
+        const { assistantText, intimacy } = await api.chat(text, "text");
         void api.log("llm_done", { llmMs: msSince(llmT0) });
         ui.appendMessage("assistant", assistantText);
+        ui.setIntimacy(intimacy?.level ?? null);
         setState("speaking");
 
         void api.log("tts_start");
-        const res = await speakWithWebSpeech(assistantText);
+        const res = await speak(assistantText);
         void api.log("tts_end", { ttsMs: res?.ttsMs ?? 0 });
-        setState("idle");
       } catch (e) {
         stopAll("chat_text", `チャットに失敗しました: ${safeErr(e)}`);
       } finally {
@@ -233,18 +295,35 @@ async function main() {
   });
 
   ui.mount();
+  ui.setMode(mode);
   setState("idle");
   ensureConsentUi();
 
+  // Load safe per-site UI config (name/avatar/tts hint)
+  try {
+    const cfg = await api.getConfig();
+    ttsVoiceHint = cfg.ttsVoiceHint ?? null;
+    ui.setProfile({
+      displayName: overrideDisplayName ?? cfg.displayName ?? "Mirai Aizawa",
+      avatarUrl: overrideAvatarUrl ?? cfg.avatarUrl ?? null,
+    });
+  } catch {
+    ui.setProfile({ displayName: overrideDisplayName ?? "Mirai Aizawa", avatarUrl: overrideAvatarUrl });
+  }
+
   // Create session (server stores UA/IP); keep UX resilient if it fails.
   try {
-    await api.createSession();
+    const storedUserId = localStorage.getItem(userIdStorageKey);
+    const sess = await api.createSession(storedUserId);
+    localStorage.setItem(userIdStorageKey, sess.userId);
+    ui.setIntimacy(sess.intimacy?.level ?? null);
   } catch (e) {
     ui.setError("セッション初期化に失敗しました。ページを再読み込みしてください。");
   }
 
   // Helpful first message
-  ui.appendMessage("assistant", `こんにちは。Startを押して話しかけてください（VAD: ${VAD_CONFIG.minSpeechMs}ms/${VAD_CONFIG.silenceMs}ms/${VAD_CONFIG.maxSpeechMs}ms）。`);
+  ui.appendMessage("assistant", `こんにちは、Mirai Aizawaです。音声/テキストどちらでも会話できます。`);
+  ui.appendMessage("assistant", `（VAD: ${VAD_CONFIG.minSpeechMs}ms/${VAD_CONFIG.silenceMs}ms/${VAD_CONFIG.maxSpeechMs}ms）`);
 }
 
 void main();

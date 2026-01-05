@@ -17,4 +17,9 @@ export function getChatModel() {
   return env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
 }
 
+export function getIntimacyModel() {
+  const env = getServerEnv();
+  return env.OPENAI_INTIMACY_MODEL || env.OPENAI_CHAT_MODEL || "gpt-4o-mini";
+}
+
 

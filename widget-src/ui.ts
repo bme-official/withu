@@ -3,6 +3,7 @@ import { UI_TEXT, WIDGET_VERSION } from "./constants";
 
 export type UiCallbacks = {
   onToggleOpen(open: boolean): void;
+  onSelectMode(mode: "voice" | "text"): void;
   onStart(): void;
   onStop(): void;
   onSendText(text: string): void;
@@ -14,6 +15,9 @@ export type UiController = {
   mount(): void;
   setOpen(open: boolean): void;
   setState(state: WidgetState): void;
+  setMode(mode: "voice" | "text"): void;
+  setProfile(profile: { displayName: string; avatarUrl: string | null }): void;
+  setIntimacy(level: number | null): void;
   appendMessage(role: "user" | "assistant", content: string): void;
   setError(msg: string | null): void;
   setConsentVisible(visible: boolean): void;
@@ -66,13 +70,49 @@ export function createUi(cb: UiCallbacks): UiController {
       border-bottom: 1px solid rgba(0,0,0,0.08);
       background: #f9fafb;
     }
-    .title { font-weight: 600; }
+    .title { font-weight: 700; display:flex; align-items:center; gap:10px; }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 9999px;
+      overflow: hidden; border: 1px solid rgba(0,0,0,0.12);
+      background: linear-gradient(135deg, #111827, #6d28d9);
+      flex: none;
+    }
+    .avatar.speaking {
+      border-color: rgba(109,40,217,0.55);
+      box-shadow: 0 0 0 4px rgba(109,40,217,0.18);
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display:block; }
+    .nameWrap { display:flex; flex-direction: column; min-width: 0; }
+    .name { font-weight: 700; font-size: 13px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sub { font-size: 11px; opacity: 0.6; }
     .status {
       font-size: 12px;
       padding: 4px 8px;
       border-radius: 9999px;
       background: rgba(0,0,0,0.06);
     }
+    .status.speaking {
+      background: rgba(109,40,217,0.12);
+      color: #6d28d9;
+      border: 1px solid rgba(109,40,217,0.25);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+      100% { transform: scale(1); }
+    }
+    .modeTabs { display:flex; gap: 8px; }
+    .tab {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 9999px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: white;
+      cursor: pointer;
+      user-select:none;
+    }
+    .tab.active { background: #111827; border-color: #111827; color: white; }
     .log {
       flex: 1;
       overflow: auto;
@@ -152,14 +192,57 @@ export function createUi(cb: UiCallbacks): UiController {
 
   const title = document.createElement("div");
   title.className = "title";
-  title.textContent = UI_TEXT.title;
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  const avatarImg = document.createElement("img");
+  avatarImg.alt = "avatar";
+  avatarImg.src =
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#111827"/><stop offset="1" stop-color="#6d28d9"/></linearGradient></defs><rect width="200" height="200" rx="100" fill="url(#g)"/><circle cx="80" cy="88" r="12" fill="white" opacity="0.9"/><circle cx="125" cy="88" r="12" fill="white" opacity="0.9"/><path d="M70 130c18 18 48 18 66 0" stroke="white" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.9"/></svg>`,
+    );
+  avatar.appendChild(avatarImg);
+
+  const nameWrap = document.createElement("div");
+  nameWrap.className = "nameWrap";
+  const nameEl = document.createElement("div");
+  nameEl.className = "name";
+  nameEl.textContent = UI_TEXT.title;
+  const subEl = document.createElement("div");
+  subEl.className = "sub";
+  subEl.textContent = "Mirai Aizawa";
+  let currentDisplayName = "Mirai Aizawa";
+  let currentIntimacy: number | null = null;
+  nameWrap.appendChild(nameEl);
+  nameWrap.appendChild(subEl);
+
+  title.appendChild(avatar);
+  title.appendChild(nameWrap);
 
   const status = document.createElement("div");
   status.className = "status";
   status.textContent = "idle";
 
+  const tabs = document.createElement("div");
+  tabs.className = "modeTabs";
+  const tabVoice = document.createElement("div");
+  tabVoice.className = "tab active";
+  tabVoice.textContent = "音声";
+  const tabText = document.createElement("div");
+  tabText.className = "tab";
+  tabText.textContent = "テキスト";
+  tabs.appendChild(tabVoice);
+  tabs.appendChild(tabText);
+
+  const right = document.createElement("div");
+  right.style.display = "flex";
+  right.style.alignItems = "center";
+  right.style.gap = "8px";
+  right.appendChild(tabs);
+  right.appendChild(status);
+
   header.appendChild(title);
-  header.appendChild(status);
+  header.appendChild(right);
 
   const log = document.createElement("div");
   log.className = "log";
@@ -247,6 +330,14 @@ export function createUi(cb: UiCallbacks): UiController {
     cb.onToggleOpen(open);
   });
 
+  function setActiveTab(mode: "voice" | "text") {
+    tabVoice.classList.toggle("active", mode === "voice");
+    tabText.classList.toggle("active", mode === "text");
+    cb.onSelectMode(mode);
+  }
+  tabVoice.addEventListener("click", () => setActiveTab("voice"));
+  tabText.addEventListener("click", () => setActiveTab("text"));
+
   startBtn.addEventListener("click", () => cb.onStart());
   stopBtn.addEventListener("click", () => cb.onStop());
 
@@ -281,6 +372,21 @@ export function createUi(cb: UiCallbacks): UiController {
     },
     setState(s) {
       status.textContent = s;
+      status.classList.toggle("speaking", s === "speaking");
+      avatar.classList.toggle("speaking", s === "speaking");
+    },
+    setMode(mode) {
+      tabVoice.classList.toggle("active", mode === "voice");
+      tabText.classList.toggle("active", mode === "text");
+    },
+    setProfile(profile) {
+      currentDisplayName = profile.displayName;
+      subEl.textContent = currentIntimacy ? `${currentDisplayName} • 親密度 Lv${currentIntimacy}` : currentDisplayName;
+      if (profile.avatarUrl) avatarImg.src = profile.avatarUrl;
+    },
+    setIntimacy(level) {
+      currentIntimacy = level;
+      subEl.textContent = currentIntimacy ? `${currentDisplayName} • 親密度 Lv${currentIntimacy}` : currentDisplayName;
     },
     appendMessage(role, content) {
       const div = document.createElement("div");

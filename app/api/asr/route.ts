@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { json, errorJson } from "@/lib/server/http";
 import { rateLimitOrThrow } from "@/lib/server/rateLimit";
 import { getClientIp } from "@/lib/server/request";
-import { insertEvents } from "@/lib/server/db";
+import { assertSessionToken, insertEvents } from "@/lib/server/db";
 import { getOpenAI } from "@/lib/server/openai";
 import { toFile } from "openai/uploads";
 
@@ -19,15 +19,18 @@ export async function POST(req: NextRequest) {
 
     const fd = await req.formData();
     const sessionId = String(fd.get("sessionId") || "");
+    const sessionToken = String(fd.get("sessionToken") || "");
     const audio = fd.get("audio");
 
     if (!sessionId || !/^[0-9a-f-]{36}$/i.test(sessionId)) return errorJson(400, "invalid_sessionId");
+    if (!sessionToken || sessionToken.length < 16) return errorJson(400, "invalid_sessionToken");
     if (!(audio instanceof File)) return errorJson(400, "missing_audio");
 
     // very rough DoS protection
     if (audio.size > 15 * 1024 * 1024) return errorJson(413, "file_too_large");
 
     rateLimitOrThrow(`asr_session:${sessionId}`, 25, 60_000);
+    await assertSessionToken(sessionId, sessionToken);
 
     const buf = Buffer.from(await audio.arrayBuffer());
     const file = await toFile(buf, audio.name || "audio.webm", { type: audio.type || "audio/webm" });

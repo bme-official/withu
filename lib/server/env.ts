@@ -7,6 +7,7 @@ const EnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   OPENAI_API_KEY: z.string().min(20),
   OPENAI_CHAT_MODEL: z.string().optional(),
+  OPENAI_INTIMACY_MODEL: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof EnvSchema>;

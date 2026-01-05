@@ -2,10 +2,13 @@ export type ApiClient = {
   baseUrl: string;
   siteId: string;
   sessionId: string | null;
-  createSession(): Promise<string>;
+  sessionToken: string | null;
+  userId: string | null;
+  getConfig(): Promise<{ displayName: string; avatarUrl: string | null; ttsVoiceHint: string | null }>;
+  createSession(userId?: string | null): Promise<{ sessionId: string; sessionToken: string; userId: string; intimacy: { level: number; xp: number } }>;
   log(type: string, meta?: unknown): Promise<void>;
   asr(audio: Blob): Promise<{ text: string }>;
-  chat(userText: string): Promise<{ assistantText: string }>;
+  chat(userText: string, inputMode: "voice" | "text"): Promise<{ assistantText: string; intimacy: { level: number; xp: number; nextXp: number | null; delta: number } | null }>;
   tts(text: string): Promise<{ mode: string }>;
 };
 
@@ -18,7 +21,11 @@ function safeJsonParse(text: string): unknown {
 }
 
 export function createApiClient(baseUrl: string, siteId: string): ApiClient {
-  const state: { sessionId: string | null } = { sessionId: null };
+  const state: { sessionId: string | null; sessionToken: string | null; userId: string | null } = {
+    sessionId: null,
+    sessionToken: null,
+    userId: null,
+  };
 
   async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
     const res = await fetch(`${baseUrl}${path}`, {
@@ -42,21 +49,37 @@ export function createApiClient(baseUrl: string, siteId: string): ApiClient {
     get sessionId() {
       return state.sessionId;
     },
-    async createSession() {
-      const data = await requestJson<{ sessionId: string }>("/api/session", {
+    get sessionToken() {
+      return state.sessionToken;
+    },
+    get userId() {
+      return state.userId;
+    },
+    async getConfig() {
+      const res = await fetch(`${baseUrl}/api/config?siteId=${encodeURIComponent(siteId)}`, { method: "GET" });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status} /api/config ${text}`);
+      const j = JSON.parse(text) as { displayName: string; avatarUrl: string | null; ttsVoiceHint: string | null };
+      return j;
+    },
+    async createSession(userId) {
+      const data = await requestJson<{ sessionId: string; sessionToken: string; userId: string; intimacy: { level: number; xp: number } }>("/api/session", {
         method: "POST",
-        body: JSON.stringify({ siteId }),
+        body: JSON.stringify({ siteId, userId: userId ?? state.userId ?? undefined }),
       });
       state.sessionId = data.sessionId;
-      return data.sessionId;
+      state.sessionToken = data.sessionToken;
+      state.userId = data.userId;
+      return data;
     },
     async log(type: string, meta?: unknown) {
-      if (!state.sessionId) return;
+      if (!state.sessionId || !state.sessionToken) return;
       try {
         await requestJson("/api/logs", {
           method: "POST",
           body: JSON.stringify({
             sessionId: state.sessionId,
+            sessionToken: state.sessionToken,
             events: [{ type, meta: meta ?? null }],
           }),
         });
@@ -65,27 +88,28 @@ export function createApiClient(baseUrl: string, siteId: string): ApiClient {
       }
     },
     async asr(audio: Blob) {
-      if (!state.sessionId) throw new Error("missing sessionId");
+      if (!state.sessionId || !state.sessionToken) throw new Error("missing session");
       const fd = new FormData();
       fd.append("sessionId", state.sessionId);
+      fd.append("sessionToken", state.sessionToken);
       fd.append("audio", audio, "audio.webm");
       const res = await fetch(`${baseUrl}/api/asr`, { method: "POST", body: fd });
       const text = await res.text();
       if (!res.ok) throw new Error(`HTTP ${res.status} /api/asr ${text}`);
       return JSON.parse(text) as { text: string };
     },
-    async chat(userText: string) {
-      if (!state.sessionId) throw new Error("missing sessionId");
-      return await requestJson<{ assistantText: string }>("/api/chat", {
+    async chat(userText: string, inputMode) {
+      if (!state.sessionId || !state.sessionToken) throw new Error("missing session");
+      return await requestJson<{ assistantText: string; intimacy: { level: number; xp: number; nextXp: number | null; delta: number } | null }>("/api/chat", {
         method: "POST",
-        body: JSON.stringify({ sessionId: state.sessionId, userText }),
+        body: JSON.stringify({ sessionId: state.sessionId, sessionToken: state.sessionToken, userText, inputMode }),
       });
     },
     async tts(text: string) {
-      if (!state.sessionId) throw new Error("missing sessionId");
+      if (!state.sessionId || !state.sessionToken) throw new Error("missing session");
       return await requestJson<{ mode: string }>("/api/tts", {
         method: "POST",
-        body: JSON.stringify({ sessionId: state.sessionId, text }),
+        body: JSON.stringify({ sessionId: state.sessionId, sessionToken: state.sessionToken, text }),
       });
     },
   };

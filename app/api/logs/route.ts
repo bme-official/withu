@@ -5,7 +5,7 @@ import { json, errorJson } from "@/lib/server/http";
 import { rateLimitOrThrow } from "@/lib/server/rateLimit";
 import { getClientIp } from "@/lib/server/request";
 import { LogsSchema } from "@/lib/server/validators";
-import { insertEvents } from "@/lib/server/db";
+import { assertSessionToken, insertEvents } from "@/lib/server/db";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -16,7 +16,8 @@ export async function POST(req: NextRequest) {
     const parsed = LogsSchema.safeParse(body);
     if (!parsed.success) return errorJson(400, "invalid_body");
 
-    const { sessionId, events } = parsed.data;
+    const { sessionId, sessionToken, events } = parsed.data;
+    await assertSessionToken(sessionId, sessionToken);
     await insertEvents(
       sessionId,
       events.map((e) => ({ type: e.type, meta: e.meta ?? null })),

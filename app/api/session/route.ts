@@ -5,7 +5,8 @@ import { json, errorJson } from "@/lib/server/http";
 import { rateLimitOrThrow } from "@/lib/server/rateLimit";
 import { getClientIp, getUserAgent } from "@/lib/server/request";
 import { SessionCreateSchema } from "@/lib/server/validators";
-import { createSessionRow, insertEvents } from "@/lib/server/db";
+import { createSessionRowV2, createSessionToken, getUserIntimacy, insertEvents, upsertUser } from "@/lib/server/db";
+import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -16,12 +17,34 @@ export async function POST(req: NextRequest) {
     const parsed = SessionCreateSchema.safeParse(body);
     if (!parsed.success) return errorJson(400, "invalid_body");
 
-    const { siteId } = parsed.data;
+    const { siteId, userId: maybeUserId } = parsed.data;
     const userAgent = getUserAgent(req);
-    const row = await createSessionRow({ siteId, userAgent, ip });
-    await insertEvents(row.id, [{ type: "session_create", meta: { siteId } }]);
+    const { userId } = await upsertUser({ userId: maybeUserId, siteId });
+    const intimacy = await getUserIntimacy(userId).catch(() => ({ level: 1, xp: 0 }));
+    const { token: sessionToken, tokenHash } = createSessionToken();
+    const row = await createSessionRowV2({ siteId, userId, userAgent, ip, tokenHash });
 
-    return json({ ok: true, sessionId: row.id });
+    // Ensure site profile row exists (used for avatar/name/persona management).
+    // This does NOT overwrite existing values.
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
+      await supabaseAdmin.from("site_profiles").upsert(
+        {
+          site_id: siteId,
+          display_name: "Mirai Aizawa",
+          avatar_url: null,
+          persona_prompt: "",
+          tts_voice_hint: null,
+        },
+        { onConflict: "site_id", ignoreDuplicates: true },
+      );
+    } catch {
+      // ignore: should not block session creation
+    }
+
+    await insertEvents(row.sessionId, [{ type: "session_create", meta: { siteId, userId } }]);
+
+    return json({ ok: true, sessionId: row.sessionId, sessionToken, userId, intimacy });
   } catch (e) {
     // @ts-expect-error: from rateLimitOrThrow
     const status = e?.status ?? 500;

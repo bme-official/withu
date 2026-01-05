@@ -5,7 +5,7 @@ import { json, errorJson } from "@/lib/server/http";
 import { rateLimitOrThrow } from "@/lib/server/rateLimit";
 import { getClientIp } from "@/lib/server/request";
 import { TtsSchema } from "@/lib/server/validators";
-import { insertEvents } from "@/lib/server/db";
+import { assertSessionToken, insertEvents } from "@/lib/server/db";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -16,7 +16,8 @@ export async function POST(req: NextRequest) {
     const parsed = TtsSchema.safeParse(body);
     if (!parsed.success) return errorJson(400, "invalid_body");
 
-    const { sessionId } = parsed.data;
+    const { sessionId, sessionToken } = parsed.data;
+    await assertSessionToken(sessionId, sessionToken);
     await insertEvents(sessionId, [{ type: "tts_mode", meta: { mode: "client_web_speech" } }]);
 
     // Future extension: return audio url/binary here
