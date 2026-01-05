@@ -89,6 +89,30 @@ WordPress側に以下を貼るだけです（`data-site-id` で導入サイト�
 - **`data-site-id`**: 必須。導入サイト識別（ログやpersona適用のキー）
 - **`data-display-name`**: 任意。ヘッダ表示名（未指定ならSupabaseの `site_profiles.display_name`）
 - **`data-avatar-url`**: 任意。アバター画像URL（未指定ならSupabaseの `site_profiles.avatar_url`）
+- **`data-layout`**: 任意。`page` を指定するとフルページUI（右下バブルなし）
+
+### `/chat/` のように「ページ全体をチャット画面」にしたい場合（フルページ表示）
+
+右下バブルを出さず、画面全体にチャットUI（中央アバター＋チャットログ）を表示します。
+
+```html
+<script
+  src="https://YOUR-APP.vercel.app/widget.js?v=page"
+  data-site-id="mirai-aizawa-com"
+  data-layout="page"
+  async
+></script>
+```
+
+> **Supabaseの `site_profiles` を反映したい場合**は、`data-display-name` / `data-avatar-url` を付けないでください（`data-*` が最優先で上書きされます）。
+
+### Supabase 設定が反映されているか確認（安全な確認）
+
+`site_id` が一致していれば、`/api/config` に反映されます。
+
+```bash
+curl -sS "https://YOUR-APP.vercel.app/api/config?siteId=mirai-aizawa-com"
+```
 
 ---
 

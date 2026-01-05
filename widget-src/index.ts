@@ -71,6 +71,7 @@ async function main() {
   const overrideDisplayName = script.dataset.displayName || null;
   const overrideAvatarUrl = script.dataset.avatarUrl || null;
   const userIdStorageKey = `${STORAGE_KEYS.userIdPrefix}${siteId}`;
+  const layout = (script.dataset.layout || script.dataset.mode || "bubble") === "page" ? "page" : "bubble";
 
   let state: WidgetState = "idle";
   let inFlight = false;
@@ -136,7 +137,8 @@ async function main() {
     return res;
   }
 
-  const ui = createUi({
+  const ui = createUi(
+    {
     onToggleOpen(open) {
       if (open) void api.log("widget_open");
       ensureConsentUi();
@@ -292,10 +294,16 @@ async function main() {
         setState("idle");
       }
     },
-  });
+    },
+    { layout },
+  );
 
   ui.mount();
   ui.setMode(mode);
+  if (layout === "page") {
+    ui.setOpen(true);
+    void api.log("widget_open", { layout: "page" });
+  }
   setState("idle");
   ensureConsentUi();
 

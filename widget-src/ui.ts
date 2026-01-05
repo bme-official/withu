@@ -1,6 +1,8 @@
 import type { WidgetState } from "./stateMachine";
 import { UI_TEXT, WIDGET_VERSION } from "./constants";
 
+export type UiLayout = "bubble" | "page";
+
 export type UiCallbacks = {
   onToggleOpen(open: boolean): void;
   onSelectMode(mode: "voice" | "text"): void;
@@ -26,16 +28,24 @@ export type UiController = {
   setTextFallbackEnabled(enabled: boolean): void;
 };
 
-export function createUi(cb: UiCallbacks): UiController {
+export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiController {
   const hostId = "withu-voice-widget-host";
   let open = false;
+  const layout: UiLayout = opts?.layout ?? "bubble";
 
   const host = document.createElement("div");
   host.id = hostId;
   host.style.position = "fixed";
-  host.style.right = "16px";
-  host.style.bottom = "16px";
   host.style.zIndex = "2147483647";
+  if (layout === "page") {
+    host.style.top = "0";
+    host.style.left = "0";
+    host.style.right = "0";
+    host.style.bottom = "0";
+  } else {
+    host.style.right = "16px";
+    host.style.bottom = "16px";
+  }
 
   const shadow = host.attachShadow({ mode: "open" });
 
@@ -64,6 +74,19 @@ export function createUi(cb: UiCallbacks): UiController {
       color: #111827;
     }
     .panel.open { display: flex; flex-direction: column; }
+    .page .bubble { display: none !important; }
+    .page .panel {
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
+      margin-bottom: 0;
+    }
+    .page .header { padding: 16px 16px; }
+    .page .log { padding: 16px; }
+    .page .footer { padding: 16px; }
+    .page .status { display:none; }
+    .page .modeTabs { gap: 10px; }
+    .page .tab { padding: 8px 12px; font-size: 13px; }
     .header {
       display:flex; align-items:center; justify-content:space-between;
       padding: 12px 12px;
@@ -76,6 +99,44 @@ export function createUi(cb: UiCallbacks): UiController {
       overflow: hidden; border: 1px solid rgba(0,0,0,0.12);
       background: linear-gradient(135deg, #111827, #6d28d9);
       flex: none;
+    }
+    .hero {
+      padding: 18px 16px 10px 16px;
+      background: linear-gradient(180deg, #f9fafb, rgba(249,250,251,0.0));
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      display:flex;
+      flex-direction: column;
+      align-items:center;
+      gap: 10px;
+    }
+    .page .hero { padding-top: 28px; }
+    .heroAvatar {
+      width: 116px; height: 116px; border-radius: 9999px;
+      overflow:hidden;
+      border: 2px solid rgba(0,0,0,0.10);
+      box-shadow: 0 20px 45px rgba(0,0,0,0.12);
+      background: linear-gradient(135deg, #111827, #6d28d9);
+    }
+    .heroAvatar.speaking {
+      border-color: rgba(109,40,217,0.65);
+      box-shadow: 0 0 0 7px rgba(109,40,217,0.18), 0 20px 45px rgba(0,0,0,0.12);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .heroAvatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .heroName { font-weight: 800; font-size: 16px; }
+    .heroSub { font-size: 12px; opacity: 0.7; text-align:center; }
+    .heroPills { display:flex; gap: 8px; align-items:center; }
+    .pill {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 9999px;
+      border: 1px solid rgba(0,0,0,0.10);
+      background: rgba(255,255,255,0.9);
+    }
+    .pill.speaking {
+      border-color: rgba(109,40,217,0.25);
+      background: rgba(109,40,217,0.10);
+      color: #6d28d9;
     }
     .avatar.speaking {
       border-color: rgba(109,40,217,0.55);
@@ -183,6 +244,7 @@ export function createUi(cb: UiCallbacks): UiController {
   `;
 
   const wrap = document.createElement("div");
+  wrap.className = layout === "page" ? "page" : "";
 
   const panel = document.createElement("div");
   panel.className = "panel";
@@ -243,6 +305,39 @@ export function createUi(cb: UiCallbacks): UiController {
 
   header.appendChild(title);
   header.appendChild(right);
+
+  // Page "hero" (center avatar + speaking feel)
+  const hero = document.createElement("div");
+  hero.className = "hero";
+  const heroAvatar = document.createElement("div");
+  heroAvatar.className = "heroAvatar";
+  const heroAvatarImg = document.createElement("img");
+  heroAvatarImg.alt = "avatar";
+  heroAvatarImg.src = avatarImg.src;
+  heroAvatar.appendChild(heroAvatarImg);
+
+  const heroName = document.createElement("div");
+  heroName.className = "heroName";
+  heroName.textContent = "Mirai Aizawa";
+  const heroSub = document.createElement("div");
+  heroSub.className = "heroSub";
+  heroSub.textContent = "ここから話しかけてね";
+
+  const heroPills = document.createElement("div");
+  heroPills.className = "heroPills";
+  const heroStatus = document.createElement("div");
+  heroStatus.className = "pill";
+  heroStatus.textContent = "idle";
+  const heroMode = document.createElement("div");
+  heroMode.className = "pill";
+  heroMode.textContent = "音声/テキスト";
+  heroPills.appendChild(heroMode);
+  heroPills.appendChild(heroStatus);
+
+  hero.appendChild(heroAvatar);
+  hero.appendChild(heroName);
+  hero.appendChild(heroSub);
+  hero.appendChild(heroPills);
 
   const log = document.createElement("div");
   log.className = "log";
@@ -305,6 +400,7 @@ export function createUi(cb: UiCallbacks): UiController {
   footer.appendChild(meta);
 
   panel.appendChild(header);
+  panel.appendChild(hero);
   panel.appendChild(log);
   panel.appendChild(footer);
 
@@ -325,6 +421,7 @@ export function createUi(cb: UiCallbacks): UiController {
   }
 
   bubble.addEventListener("click", () => {
+    if (layout === "page") return;
     open = !open;
     panel.classList.toggle("open", open);
     cb.onToggleOpen(open);
@@ -333,6 +430,7 @@ export function createUi(cb: UiCallbacks): UiController {
   function setActiveTab(mode: "voice" | "text") {
     tabVoice.classList.toggle("active", mode === "voice");
     tabText.classList.toggle("active", mode === "text");
+    heroMode.textContent = mode === "voice" ? "音声モード" : "テキストモード";
     cb.onSelectMode(mode);
   }
   tabVoice.addEventListener("click", () => setActiveTab("voice"));
@@ -365,6 +463,11 @@ export function createUi(cb: UiCallbacks): UiController {
     mount() {
       if (document.getElementById(hostId)) return;
       document.body.appendChild(host);
+      if (layout === "page") {
+        // page layout is always open
+        open = true;
+        panel.classList.add("open");
+      }
     },
     setOpen(next) {
       open = next;
@@ -374,15 +477,21 @@ export function createUi(cb: UiCallbacks): UiController {
       status.textContent = s;
       status.classList.toggle("speaking", s === "speaking");
       avatar.classList.toggle("speaking", s === "speaking");
+      heroStatus.textContent = s;
+      heroStatus.classList.toggle("speaking", s === "speaking");
+      heroAvatar.classList.toggle("speaking", s === "speaking");
     },
     setMode(mode) {
       tabVoice.classList.toggle("active", mode === "voice");
       tabText.classList.toggle("active", mode === "text");
+      heroMode.textContent = mode === "voice" ? "音声モード" : "テキストモード";
     },
     setProfile(profile) {
       currentDisplayName = profile.displayName;
       subEl.textContent = currentIntimacy ? `${currentDisplayName} • 親密度 Lv${currentIntimacy}` : currentDisplayName;
+      heroName.textContent = profile.displayName;
       if (profile.avatarUrl) avatarImg.src = profile.avatarUrl;
+      if (profile.avatarUrl) heroAvatarImg.src = profile.avatarUrl;
     },
     setIntimacy(level) {
       currentIntimacy = level;
