@@ -19,6 +19,7 @@ import {
 import { getIntimacyModel, getOpenAI, getChatModel } from "@/lib/server/openai";
 import { SYSTEM_PROMPT } from "@/lib/server/systemPrompt";
 import { z } from "zod";
+import { corsHeaders } from "@/lib/server/cors";
 
 function msSince(t0: number) {
   return Math.round(performance.now() - t0);
@@ -118,6 +119,7 @@ function stabilizeDelta(input: {
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
+  const cors = corsHeaders(req);
   try {
     rateLimitOrThrow(`chat:${ip}`, 60, 60_000);
 
@@ -261,13 +263,20 @@ export async function POST(req: NextRequest) {
       ...(intimacyMeta ? [{ type: "intimacy_update", meta: intimacyMeta }] : []),
     ]);
 
-    return json({ ok: true, assistantText, intimacy });
+    return json({ ok: true, assistantText, intimacy }, { status: 200, headers: cors });
   } catch (e) {
     // @ts-expect-error: from rateLimitOrThrow
     const status = e?.status ?? 500;
-    if (status === 429) return errorJson(429, "rate_limited");
-    return errorJson(500, "internal_error", { message: e instanceof Error ? e.message : String(e) });
+    if (status === 429) return json({ ok: false, error: "rate_limited" }, { status: 429, headers: cors });
+    return json(
+      { ok: false, error: "internal_error", message: e instanceof Error ? e.message : String(e) },
+      { status: 500, headers: cors },
+    );
   }
+}
+
+export async function OPTIONS(req: NextRequest) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 

@@ -6,9 +6,11 @@ import { rateLimitOrThrow } from "@/lib/server/rateLimit";
 import { getClientIp } from "@/lib/server/request";
 import { LogsSchema } from "@/lib/server/validators";
 import { assertSessionToken, insertEvents } from "@/lib/server/db";
+import { corsHeaders } from "@/lib/server/cors";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
+  const cors = corsHeaders(req);
   try {
     rateLimitOrThrow(`logs:${ip}`, 120, 60_000);
 
@@ -23,13 +25,20 @@ export async function POST(req: NextRequest) {
       events.map((e) => ({ type: e.type, meta: e.meta ?? null })),
     );
 
-    return json({ ok: true });
+    return json({ ok: true }, { status: 200, headers: cors });
   } catch (e) {
     // @ts-expect-error: from rateLimitOrThrow
     const status = e?.status ?? 500;
-    if (status === 429) return errorJson(429, "rate_limited");
-    return errorJson(500, "internal_error", { message: e instanceof Error ? e.message : String(e) });
+    if (status === 429) return json({ ok: false, error: "rate_limited" }, { status: 429, headers: cors });
+    return json(
+      { ok: false, error: "internal_error", message: e instanceof Error ? e.message : String(e) },
+      { status: 500, headers: cors },
+    );
   }
+}
+
+export async function OPTIONS(req: NextRequest) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 

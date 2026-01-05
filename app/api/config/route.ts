@@ -6,6 +6,7 @@ import { rateLimitOrThrow } from "@/lib/server/rateLimit";
 import { getClientIp } from "@/lib/server/request";
 import { z } from "zod";
 import { getSiteProfile } from "@/lib/server/db";
+import { corsHeaders } from "@/lib/server/cors";
 
 const QuerySchema = z.object({
   siteId: z.string().min(1).max(100),
@@ -13,6 +14,7 @@ const QuerySchema = z.object({
 
 export async function GET(req: NextRequest) {
   const ip = getClientIp(req);
+  const cors = corsHeaders(req);
   try {
     rateLimitOrThrow(`config:${ip}`, 120, 60_000);
 
@@ -24,19 +26,29 @@ export async function GET(req: NextRequest) {
     const prof = await getSiteProfile(siteId);
 
     // Return only safe UI config (persona_prompt stays server-only)
-    return json({
+    return json(
+      {
       ok: true,
       siteId,
       displayName: prof?.display_name ?? "Mirai Aizawa",
       avatarUrl: prof?.avatar_url ?? null,
       ttsVoiceHint: prof?.tts_voice_hint ?? null,
-    });
+      },
+      { status: 200, headers: cors },
+    );
   } catch (e) {
     // @ts-expect-error: from rateLimitOrThrow
     const status = e?.status ?? 500;
-    if (status === 429) return errorJson(429, "rate_limited");
-    return errorJson(500, "internal_error", { message: e instanceof Error ? e.message : String(e) });
+    if (status === 429) return json({ ok: false, error: "rate_limited" }, { status: 429, headers: cors });
+    return json(
+      { ok: false, error: "internal_error", message: e instanceof Error ? e.message : String(e) },
+      { status: 500, headers: cors },
+    );
   }
+}
+
+export async function OPTIONS(req: NextRequest) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 

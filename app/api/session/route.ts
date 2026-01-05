@@ -7,9 +7,11 @@ import { getClientIp, getUserAgent } from "@/lib/server/request";
 import { SessionCreateSchema } from "@/lib/server/validators";
 import { createSessionRowV2, createSessionToken, getUserIntimacy, insertEvents, upsertUser } from "@/lib/server/db";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { corsHeaders } from "@/lib/server/cors";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
+  const cors = corsHeaders(req);
   try {
     rateLimitOrThrow(`session:${ip}`, 30, 60_000);
 
@@ -44,13 +46,20 @@ export async function POST(req: NextRequest) {
 
     await insertEvents(row.sessionId, [{ type: "session_create", meta: { siteId, userId } }]);
 
-    return json({ ok: true, sessionId: row.sessionId, sessionToken, userId, intimacy });
+    return json({ ok: true, sessionId: row.sessionId, sessionToken, userId, intimacy }, { status: 200, headers: cors });
   } catch (e) {
     // @ts-expect-error: from rateLimitOrThrow
     const status = e?.status ?? 500;
-    if (status === 429) return errorJson(429, "rate_limited");
-    return errorJson(500, "internal_error", { message: e instanceof Error ? e.message : String(e) });
+    if (status === 429) return json({ ok: false, error: "rate_limited" }, { status: 429, headers: cors });
+    return json(
+      { ok: false, error: "internal_error", message: e instanceof Error ? e.message : String(e) },
+      { status: 500, headers: cors },
+    );
   }
+}
+
+export async function OPTIONS(req: NextRequest) {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 

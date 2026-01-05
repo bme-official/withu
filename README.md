@@ -59,6 +59,10 @@ GitHubにpush → VercelでImportします。
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY`
 - `OPENAI_CHAT_MODEL`（任意、デフォルト `gpt-4o-mini`）
+- `WIDGET_ALLOWED_ORIGINS`（任意。例: `https://mirai-aizawa.com`）
+
+> WordPressなど別ドメインに埋め込む場合、ブラウザがCORSを要求するため `/api/*` はCORSヘッダを返します。  
+> `WIDGET_ALLOWED_ORIGINS` を設定すると、そのオリジンだけ許可できます（未設定なら `*`）。
 
 ### ビルド
 
