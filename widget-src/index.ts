@@ -116,6 +116,8 @@ async function main() {
   let micMuted = false;
   let speakerMuted = false;
   let currentAudio: HTMLAudioElement | null = null;
+  let currentAudioStop: (() => void) | null = null;
+  let pendingListenAfterSpeak = false;
   let gotUserGesture = false;
   let bootGreetingText: string | null = null;
   let bootGreetingDisplayed = false;
@@ -173,18 +175,35 @@ async function main() {
       try {
         const audio = new Audio(url);
         currentAudio = audio;
+        let done = false;
         audio.preload = "auto";
         audio.volume = 1.0;
         const playPromise = audio.play();
         if (playPromise && typeof (playPromise as any).catch === "function") {
           await playPromise;
         }
+        // Enable barge-in while speaking (voice mode only).
+        startBargeInMonitor();
         await new Promise<void>((resolve) => {
-          audio.onended = () => resolve();
-          audio.onerror = () => resolve();
+          const finish = () => {
+            if (done) return;
+            done = true;
+            resolve();
+          };
+          // allow external interruption (barge-in)
+          currentAudioStop = () => {
+            try {
+              audio.pause();
+            } catch {}
+            finish();
+          };
+          audio.onended = () => finish();
+          audio.onerror = () => finish();
         });
       } finally {
+        stopBargeInMonitor();
         currentAudio = null;
+        currentAudioStop = null;
         URL.revokeObjectURL(url);
       }
       return { ttsMs: msSince(t0) };
@@ -270,6 +289,8 @@ async function main() {
     if (state !== "idle") return;
     // Requirement: greet first, then start listening.
     if (!bootGreetingSpoken) return;
+    // If currently playing audio, do not start listening (wait until it finishes).
+    if (currentAudio) return;
 
     // ensure mic stream
     if (!stream) {
@@ -360,6 +381,89 @@ async function main() {
     await vad.start();
   }
 
+  // Barge-in: if user starts speaking while TTS is playing, interrupt playback and go to listening.
+  let bargeRaf: number | null = null;
+  let bargeCtx: AudioContext | null = null;
+  let bargeAnalyser: AnalyserNode | null = null;
+  let bargeSrc: MediaStreamAudioSourceNode | null = null;
+  let bargeBuf: Float32Array<ArrayBuffer> | null = null;
+
+  function stopBargeInMonitor() {
+    if (bargeRaf) cancelAnimationFrame(bargeRaf);
+    bargeRaf = null;
+    try {
+      bargeSrc?.disconnect();
+    } catch {}
+    bargeSrc = null;
+    bargeAnalyser = null;
+    if (bargeCtx) {
+      try {
+        void bargeCtx.close();
+      } catch {}
+    }
+    bargeCtx = null;
+    bargeBuf = null;
+  }
+
+  function startBargeInMonitor() {
+    stopBargeInMonitor();
+    if (mode !== "voice") return;
+    if (micMuted) return;
+    if (!hasConsent()) return;
+    if (!stream) return; // no mic available yet
+    if (!currentAudio) return;
+
+    try {
+      bargeCtx = new AudioContext();
+      bargeSrc = bargeCtx.createMediaStreamSource(stream);
+      bargeAnalyser = bargeCtx.createAnalyser();
+      bargeAnalyser.fftSize = 2048;
+      bargeSrc.connect(bargeAnalyser);
+      bargeBuf = new Float32Array(new ArrayBuffer(bargeAnalyser.fftSize * 4));
+    } catch {
+      stopBargeInMonitor();
+      return;
+    }
+
+    const threshold = 0.06; // higher threshold to avoid self-audio; tune if needed
+    const minHoldMs = 140;
+    let aboveSince: number | null = null;
+
+    const tick = () => {
+      if (!bargeAnalyser || !bargeBuf) return;
+      if (!currentAudio || mode !== "voice" || micMuted || speakerMuted) {
+        stopBargeInMonitor();
+        return;
+      }
+      bargeAnalyser.getFloatTimeDomainData(bargeBuf);
+      let sum = 0;
+      for (let i = 0; i < bargeBuf.length; i++) {
+        const v = bargeBuf[i] ?? 0;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / bargeBuf.length);
+      const now = performance.now();
+      if (rms >= threshold) {
+        if (aboveSince == null) aboveSince = now;
+        if (now - aboveSince >= minHoldMs) {
+          // Interrupt TTS and start listening immediately.
+          pendingListenAfterSpeak = false;
+          try {
+            currentAudioStop?.();
+          } catch {}
+          stopBargeInMonitor();
+          setState("idle");
+          void ensureVoiceListening("barge_in");
+          return;
+        }
+      } else {
+        aboveSince = null;
+      }
+      bargeRaf = requestAnimationFrame(tick);
+    };
+    bargeRaf = requestAnimationFrame(tick);
+  }
+
   async function maybeBootGreet(reason: string) {
     if (bootGreetingSpoken) return;
     if (!api.sessionId) return;
@@ -414,7 +518,14 @@ async function main() {
         // Stop mic pipeline, but keep any ongoing TTS playback.
         stopVoicePipeline({ keepTts: true, keepState: state === "speaking" });
       } else {
-        // voice mode: keep idle; start is enabled only after consent
+        // Voice mode: never interrupt ongoing TTS; also don't start listening until TTS ends.
+        if (state === "speaking" || currentAudio) {
+          pendingListenAfterSpeak = true;
+          // keep UI in speaking state if audio is playing
+          if (state !== "speaking") setState("speaking");
+          void maybeBootGreet("mode_switch");
+          return;
+        }
         setState("idle");
         void maybeBootGreet("mode_switch");
         void ensureVoiceListening("mode_switch");
@@ -498,6 +609,12 @@ async function main() {
       } finally {
         inFlight = false;
         setState("idle");
+        // If the user switched to Voice during playback, begin listening after speaking ends.
+        const modeNow = mode as "voice" | "text";
+        if (pendingListenAfterSpeak && modeNow === "voice") {
+          pendingListenAfterSpeak = false;
+          void ensureVoiceListening("after_text_speak");
+        }
       }
     },
     },
