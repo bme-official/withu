@@ -364,7 +364,6 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       line-height: 1;
     }
     .muteBtn svg { width: 16px; height: 16px; display:block; }
-    .muteBtn .mutedLabel { font-weight: 800; color: #ef4444; }
     .muteBtn.muted {
       border-color: rgba(239,68,68,0.35);
       background: rgba(239,68,68,0.08);
