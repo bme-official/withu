@@ -81,22 +81,25 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     }
     .page .header { padding: 16px 16px; }
     .page .log { padding: 16px; }
+    .page .composer { padding: 16px; }
     .page .footer { padding: 16px; }
     .page .status { display:none; }
     /* Page layout: mobile is single column; desktop becomes 2 columns in text mode */
     .page .panel.open {
       display: grid;
       grid-template-columns: 1fr;
-      grid-template-rows: auto auto 1fr auto;
+      grid-template-rows: auto auto 1fr auto auto;
       grid-template-areas:
         "header"
         "hero"
         "log"
+        "composer"
         "footer";
     }
     .page .header { grid-area: header; }
     .page .hero { grid-area: hero; }
     .page .log { grid-area: log; }
+    .page .composer { grid-area: composer; }
     .page .footer { grid-area: footer; }
 
     /* Voice mode: hero-centered single column even on desktop */
@@ -112,10 +115,11 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     @media (min-width: 900px) {
       .page .panel.open:not(.voiceOnly) {
         grid-template-columns: 380px 1fr;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: auto 1fr auto auto;
         grid-template-areas:
           "header header"
           "hero log"
+          "hero composer"
           "hero footer";
       }
       .page .hero {
@@ -127,6 +131,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
         background: #f9fafb;
       }
       .page .log { padding: 18px; }
+      .page .composer { padding: 18px; }
       .page .footer { padding: 18px; }
     }
 
@@ -156,12 +161,13 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
           "footer";
       }
 
-      /* Text mode: log then footer (controls + input + send) */
+      /* Text mode: log -> composer (input) -> footer (fixed controls) */
       .page .panel.open:not(.voiceOnly) {
         grid-template-columns: 1fr;
-        grid-template-rows: 1fr auto;
+        grid-template-rows: 1fr auto auto;
         grid-template-areas:
           "log"
+          "composer"
           "footer";
       }
       .page .panel.open:not(.voiceOnly) .hero { display: none; }
@@ -312,6 +318,11 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       display:flex;
       flex-direction: column;
       gap: 10px;
+      background: white;
+    }
+    .composer {
+      padding: 12px;
+      border-top: 1px solid rgba(0,0,0,0.08);
       background: white;
     }
     .hideLog .log { display:none; }
@@ -506,6 +517,10 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   const log = document.createElement("div");
   log.className = "log";
 
+  // Composer (text input area) lives OUTSIDE footer and sits directly under the log.
+  const composer = document.createElement("div");
+  composer.className = "composer";
+
   const footer = document.createElement("div");
   footer.className = "footer";
   // footer controls (for mobile layout): mute + mode toggle
@@ -550,6 +565,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
 
   textRow.appendChild(textarea);
   textRow.appendChild(sendBtn);
+  composer.appendChild(textRow);
 
   const meta = document.createElement("div");
   meta.className = "muted";
@@ -558,12 +574,12 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   footer.appendChild(error);
   footer.appendChild(consent);
   footer.appendChild(footerControls);
-  footer.appendChild(textRow);
   footer.appendChild(meta);
 
   panel.appendChild(header);
   panel.appendChild(hero);
   panel.appendChild(log);
+  panel.appendChild(composer);
   panel.appendChild(footer);
 
   const bubble = document.createElement("div");
@@ -619,7 +635,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     panel.classList.toggle("hideLog", !showHistory);
     panel.classList.toggle("voiceOnly", currentMode === "voice");
     // in voice mode, hide text input completely
-    textRow.style.display = currentMode === "text" ? "flex" : "none";
+    composer.style.display = currentMode === "text" ? "block" : "none";
     muteBtn.style.display = currentMode === "voice" ? "inline-flex" : "none";
     footerMuteBtn.style.display = currentMode === "voice" ? "inline-flex" : "none";
     renderMute();

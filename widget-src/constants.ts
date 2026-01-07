@@ -2,8 +2,9 @@ export const WIDGET_VERSION = "0.1.0";
 
 // VAD spec (fixed)
 export const VAD_CONFIG = {
-  minSpeechMs: 300,
-  silenceMs: 700,
+  // Latency tuning: shorter silence end improves perceived responsiveness.
+  minSpeechMs: 250,
+  silenceMs: 450,
   maxSpeechMs: 15000,
   // RMS threshold: tune later, single source of truth.
   rmsThreshold: 0.02,

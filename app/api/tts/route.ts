@@ -5,9 +5,11 @@ import { json, errorJson } from "@/lib/server/http";
 import { rateLimitOrThrow } from "@/lib/server/rateLimit";
 import { getClientIp } from "@/lib/server/request";
 import { TtsSchema } from "@/lib/server/validators";
-import { assertSessionToken, insertEvents } from "@/lib/server/db";
+import { assertSessionToken, getSiteProfile, insertEvents } from "@/lib/server/db";
 import { corsHeaders } from "@/lib/server/cors";
-import { getOpenAI, getTtsModel } from "@/lib/server/openai";
+import { getOpenAI, getTtsModel, getTtsVoice, type OpenAiTtsVoice } from "@/lib/server/openai";
+
+type OpenAiTtsModel = "tts-1" | "tts-1-hd";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -20,12 +22,36 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return errorJson(400, "invalid_body");
 
     const { sessionId, sessionToken, text } = parsed.data;
-    await assertSessionToken(sessionId, sessionToken);
+    const auth = await assertSessionToken(sessionId, sessionToken);
     rateLimitOrThrow(`tts_session:${sessionId}`, 40, 60_000);
 
-    const model = getTtsModel();
-    const voice = "alloy";
-    const input = String(text || "").slice(0, 2000);
+    let model: OpenAiTtsModel = getTtsModel() as OpenAiTtsModel;
+    let voice: OpenAiTtsVoice = getTtsVoice();
+    let voiceSource: "env" | "site_profile" = "env";
+    // Optional per-site override via site_profiles.tts_voice_hint (e.g. "voice=shimmer, model=tts-1")
+    try {
+      if (auth.siteId) {
+        const prof = await getSiteProfile(auth.siteId);
+        const hint = (prof?.tts_voice_hint ?? "").trim().toLowerCase();
+        const voiceMatch = hint.match(/voice\s*[:=]\s*([a-z]+)/i);
+        const modelMatch = hint.match(/model\s*[:=]\s*(tts-1-hd|tts-1)/i);
+        const voiceCandidate = (voiceMatch?.[1] ?? hint).trim().toLowerCase();
+        const modelCandidate = (modelMatch?.[1] ?? "").trim().toLowerCase();
+
+        if (modelCandidate && (modelCandidate === "tts-1" || modelCandidate === "tts-1-hd")) {
+          model = modelCandidate as OpenAiTtsModel;
+          voiceSource = "site_profile";
+        }
+        if (["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes(voiceCandidate)) {
+          voice = voiceCandidate as OpenAiTtsVoice;
+          voiceSource = "site_profile";
+        }
+      }
+    } catch {
+      // ignore: keep env voice
+    }
+    // Latency tuning: keep TTS input reasonably short.
+    const input = String(text || "").slice(0, 900);
     if (!input.trim()) return errorJson(400, "empty_text");
 
     const t0 = performance.now();
@@ -33,12 +59,14 @@ export async function POST(req: NextRequest) {
       model,
       voice,
       input,
-      format: "mp3",
-    } as any);
+      response_format: "mp3",
+    });
     const buf = Buffer.from(await (speech as any).arrayBuffer());
     const ttsMs = Math.round(performance.now() - t0);
 
-    await insertEvents(sessionId, [{ type: "tts_done", meta: { mode: "server_openai", model, voice, ttsMs, bytes: buf.length } }]);
+    await insertEvents(sessionId, [
+      { type: "tts_done", meta: { mode: "server_openai", model, voice, voiceSource, ttsMs, bytes: buf.length } },
+    ]);
 
     return new Response(buf, {
       status: 200,

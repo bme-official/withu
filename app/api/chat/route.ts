@@ -20,6 +20,7 @@ import { getIntimacyModel, getOpenAI, getChatModel } from "@/lib/server/openai";
 import { SYSTEM_PROMPT } from "@/lib/server/systemPrompt";
 import { z } from "zod";
 import { corsHeaders } from "@/lib/server/cors";
+import { getServerEnv } from "@/lib/server/env";
 
 function msSince(t0: number) {
   return Math.round(performance.now() - t0);
@@ -134,7 +135,9 @@ export async function POST(req: NextRequest) {
     // Persist the user's message first so the model always sees it in history.
     await insertMessage({ sessionId, role: "user", content: userText });
 
-    const history = userId ? await listRecentMessagesForUser(userId, 30) : await listRecentMessages(sessionId, 30);
+    // Latency tuning: shorter history reduces token usage and speeds up responses.
+    const historyLimit = 12;
+    const history = userId ? await listRecentMessagesForUser(userId, historyLimit) : await listRecentMessages(sessionId, historyLimit);
     const model = getChatModel();
     const intimacyModel = getIntimacyModel();
 
@@ -165,6 +168,7 @@ export async function POST(req: NextRequest) {
     const chatResp = await getOpenAI().chat.completions.create({
       model,
       messages: chatMessages,
+      max_tokens: 220,
       temperature: 0.45,
       presence_penalty: 0.2,
       frequency_penalty: 0.2,
@@ -175,7 +179,7 @@ export async function POST(req: NextRequest) {
     if (!assistantText) return errorJson(502, "llm_empty");
     await insertMessage({ sessionId, role: "assistant", content: assistantText });
 
-    // 2) AI intimacy delta scoring (stable JSON, temperature 0)
+    // 2) Intimacy update
     const IntimacyRespSchema = z.object({
       intimacyDelta: z.number().int().min(-20).max(20),
       confidence: z.number().min(0).max(1),
@@ -187,7 +191,10 @@ export async function POST(req: NextRequest) {
     let aiReasons: string[] = [];
     let intimacySource: "ai" | "fallback" = "fallback";
 
-    if (userId) {
+    const env = getServerEnv();
+    const enableAiIntimacy = userId && env.WITHU_AI_INTIMACY === "1";
+
+    if (enableAiIntimacy) {
       const t1 = performance.now();
       try {
         const scoreResp = await getOpenAI().chat.completions.create({
@@ -198,12 +205,12 @@ export async function POST(req: NextRequest) {
             {
               role: "system",
               content:
-                "あなたは会話ログから「親密度の増減」を安定して判定する採点器です。\n" +
-                "ブレを抑えるため、通常は -2..+2 の範囲に収め、強い根拠がある時だけ大きく動かします。\n" +
-                "不快/攻撃/スパム/露骨な性的発言/迷惑行為/ハラスメントは減点し、必要なら大きく下げます。\n" +
-                "出力はJSONのみ。\n" +
-                '形式: {"intimacyDelta": integer(-20..20), "confidence": number(0..1), "reasons": string[]}\n' +
-                "reasonsは短い英数字キー。例: gratitude, self_disclosure, respectful, rude, spam, harassment, boundary_violation",
+                "You are a stable scorer that decides how intimacy should change based on a single turn.\n" +
+                "Keep it conservative: normally stay within -2..+2 unless there is a strong reason.\n" +
+                "Harassment, threats, spam, explicit sexual content, or boundary violations should decrease intimacy.\n" +
+                "Output JSON only.\n" +
+                'Format: {"intimacyDelta": integer(-20..20), "confidence": number(0..1), "reasons": string[]}\n' +
+                "reasons are short keys like: gratitude, self_disclosure, respectful, rude, spam, harassment, boundary_violation",
             },
             {
               role: "user",

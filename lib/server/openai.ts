@@ -24,7 +24,22 @@ export function getIntimacyModel() {
 
 export function getTtsModel() {
   const env = getServerEnv();
+  // Prefer lower latency by default (can be overridden via env).
   return env.OPENAI_TTS_MODEL || "tts-1";
+}
+
+export type OpenAiTtsVoice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
+
+export function getTtsVoice(): OpenAiTtsVoice {
+  const env = getServerEnv();
+  const voice = (env.OPENAI_TTS_VOICE || "shimmer").trim().toLowerCase();
+  if (voice === "alloy") return "alloy";
+  if (voice === "echo") return "echo";
+  if (voice === "fable") return "fable";
+  if (voice === "onyx") return "onyx";
+  if (voice === "nova") return "nova";
+  if (voice === "shimmer") return "shimmer";
+  throw new Error(`Invalid OPENAI_TTS_VOICE: ${voice}`);
 }
 
 
