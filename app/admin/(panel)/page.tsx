@@ -4,7 +4,15 @@ import Link from "next/link";
 import { listSiteProfiles } from "@/lib/server/db";
 
 export default async function AdminHome() {
-  const sites = await listSiteProfiles(200);
+  let sites: any[] = [];
+  let loadError = "";
+  try {
+    sites = await listSiteProfiles(200);
+  } catch (e) {
+    loadError = e instanceof Error ? e.message : String(e);
+    // eslint-disable-next-line no-console
+    console.error("[admin] failed to list site profiles", { error: loadError });
+  }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-6 py-10">
@@ -35,6 +43,12 @@ export default async function AdminHome() {
 
       <div className="rounded-xl border bg-white">
         <div className="border-b p-4 text-sm font-semibold">Sites</div>
+        {loadError ? (
+          <div className="border-b bg-red-50 p-4 text-sm text-red-800">
+            <div className="font-semibold">Failed to load sites</div>
+            <div className="mt-1 break-words font-mono text-xs">{loadError}</div>
+          </div>
+        ) : null}
         <div className="divide-y">
           {sites.length === 0 ? (
             <div className="p-4 text-sm text-zinc-600">No sites found.</div>

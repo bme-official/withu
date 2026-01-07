@@ -24,7 +24,15 @@ export default async function AdminSitePage({
   const saved = sp.saved === "1";
   const error = typeof sp.error === "string" ? sp.error : "";
 
-  const prof = await getSiteProfile(siteId);
+  let prof: Awaited<ReturnType<typeof getSiteProfile>> = null;
+  let loadError = "";
+  try {
+    prof = await getSiteProfile(siteId);
+  } catch (e) {
+    loadError = e instanceof Error ? e.message : String(e);
+    // eslint-disable-next-line no-console
+    console.error("[admin] failed to load site profile", { siteId, error: loadError });
+  }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-6 py-10">
@@ -47,6 +55,17 @@ export default async function AdminSitePage({
 
       {saved ? <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">Saved.</div> : null}
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
+      {loadError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="font-semibold">Failed to load site profile</div>
+          <div className="mt-1 break-words font-mono text-xs">{loadError}</div>
+          <div className="mt-2 text-xs text-red-900/80">
+            Check Vercel env vars (<code className="rounded bg-white/60 px-1">SUPABASE_URL</code>,{" "}
+            <code className="rounded bg-white/60 px-1">SUPABASE_SERVICE_ROLE_KEY</code>) and that Supabase has the expected{" "}
+            <code className="rounded bg-white/60 px-1">site_profiles</code> columns.
+          </div>
+        </div>
+      ) : null}
 
       <form className="flex flex-col gap-6" action={`/admin/api/site/${encodeURIComponent(siteId)}`} method="post">
         <div className="rounded-xl border bg-white p-4">
