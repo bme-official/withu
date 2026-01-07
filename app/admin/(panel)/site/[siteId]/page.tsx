@@ -48,7 +48,7 @@ export default async function AdminSitePage({
       {saved ? <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">Saved.</div> : null}
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div> : null}
 
-      <form className="flex flex-col gap-6" action={`/admin/site/${encodeURIComponent(siteId)}`} method="post">
+      <form className="flex flex-col gap-6" action={`/admin/api/site/${encodeURIComponent(siteId)}`} method="post">
         <div className="rounded-xl border bg-white p-4">
           <div className="mb-3 text-sm font-semibold">Profile</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

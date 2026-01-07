@@ -15,6 +15,8 @@ export type SiteProfileRow = {
   avatar_url: string | null;
   persona_prompt: string;
   tts_voice_hint: string | null;
+  created_at?: string;
+  updated_at?: string;
   greeting_templates?: unknown;
   cta_config?: unknown;
   chat_config?: unknown;

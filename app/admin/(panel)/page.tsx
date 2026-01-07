@@ -19,7 +19,7 @@ export default async function AdminHome() {
 
       <div className="rounded-xl border bg-white p-4">
         <div className="mb-2 text-sm font-semibold">Create / open a site</div>
-        <form className="flex flex-col gap-2 sm:flex-row" action="/admin/site/new" method="post">
+        <form className="flex flex-col gap-2 sm:flex-row" action="/admin/api/site/new" method="post">
           <input
             className="w-full rounded-lg border px-3 py-2 text-sm"
             name="siteId"

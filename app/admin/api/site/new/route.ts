@@ -1,9 +1,9 @@
 export const runtime = "nodejs";
 
 import type { NextRequest } from "next/server";
-import { upsertSiteProfile } from "@/lib/server/db";
-import { verifyAdminSession } from "@/lib/server/adminAuth";
 import { cookies } from "next/headers";
+import { verifyAdminSession } from "@/lib/server/adminAuth";
+import { upsertSiteProfile } from "@/lib/server/db";
 
 export async function POST(req: NextRequest) {
   const ok = verifyAdminSession(await cookies());
