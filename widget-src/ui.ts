@@ -459,6 +459,12 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       line-height: 22px;
       overflow-y: hidden;
     }
+    /* iOS Safari: prevent focus-zoom by keeping inputs >= 16px.
+       Needs to come AFTER the base textarea/button rules to avoid being overwritten. */
+    @media (max-width: 640px) {
+      textarea { font-size: 16px !important; }
+      button { font-size: 16px !important; }
+    }
     /* Composer: keep send button fixed height and bottom-aligned */
     .composer .row { align-items: flex-end; }
     .composer .row button { height: 44px; align-self: flex-end; flex: none; }
@@ -962,6 +968,16 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     }
   });
   textarea.addEventListener("input", () => adjustComposer());
+  // iOS: when keyboard opens/closes, re-measure viewport height so footer stays visible.
+  textarea.addEventListener("focus", () => {
+    queueMicrotask(() => updateWithuVh());
+    window.setTimeout(() => updateWithuVh(), 80);
+    window.setTimeout(() => updateWithuVh(), 250);
+  });
+  textarea.addEventListener("blur", () => {
+    window.setTimeout(() => updateWithuVh(), 80);
+    window.setTimeout(() => updateWithuVh(), 250);
+  });
   // initial sizing
   queueMicrotask(() => adjustComposer());
 
