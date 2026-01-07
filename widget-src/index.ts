@@ -243,7 +243,12 @@ async function main() {
   function setState(next: WidgetState) {
     state = next;
     ui.setState(next);
-    ui.setTextFallbackEnabled(next === "idle" && mode === "text");
+    ui.setTextFallbackEnabled(next === "idle" && mode === "text" && !inFlight);
+  }
+
+  function setInFlight(next: boolean) {
+    inFlight = next;
+    ui.setTextFallbackEnabled(state === "idle" && mode === "text" && !inFlight);
   }
 
   function hasConsent() {
@@ -254,7 +259,7 @@ async function main() {
     ui.setConsentVisible(!hasConsent());
   }
 
-  function stopVoicePipeline(opts?: { keepTts?: boolean; keepState?: boolean }) {
+  function stopVoicePipeline(opts?: { keepTts?: boolean; keepState?: boolean; keepInFlight?: boolean }) {
     try {
       vad?.stop({ stopStream: true });
     } catch {}
@@ -273,7 +278,8 @@ async function main() {
         currentAudio = null;
       }
     } catch {}
-    inFlight = false;
+    const keepInFlight = opts?.keepInFlight ?? true;
+    if (!keepInFlight) setInFlight(false);
     if (!opts?.keepState) setState("idle");
   }
 
@@ -294,7 +300,7 @@ async function main() {
       currentAudio?.pause?.();
       currentAudio = null;
     } catch {}
-    inFlight = false;
+    setInFlight(false);
     setState("idle");
     if (message) ui.setError(message);
     void api.log("error", { phase, message: message ?? null });
@@ -345,7 +351,7 @@ async function main() {
       async onSpeechEnd({ durationMs, sizeBytes, blob }) {
         if (mode !== "voice") return;
         if (state !== "listening" || inFlight) return;
-        inFlight = true;
+        setInFlight(true);
 
         setState(reduceState(state, { type: "VAD_DONE" }));
 
@@ -361,7 +367,7 @@ async function main() {
           // Guard: ignore tiny blobs (can cause Whisper "invalid file format")
           if (sizeBytes < 1200) {
             void api.log("asr_skip_small_blob", { sizeBytes, durationMs: Math.round(durationMs), type: (blob as any)?.type ?? null });
-            inFlight = false;
+            setInFlight(false);
             setState("idle");
             void ensureVoiceListening("small_blob_skip");
             return;
@@ -395,7 +401,7 @@ async function main() {
           void api.log("tts_end", { ttsMs: msSince(ttsT0) });
 
           setState(reduceState(state, { type: "TTS_END" }));
-          inFlight = false;
+          setInFlight(false);
           // auto continue listening
           setState("idle");
           void ensureVoiceListening("auto_continue");
@@ -444,6 +450,8 @@ async function main() {
     if (!hasConsent()) return;
     if (!stream) return; // no mic available yet
     if (!currentAudio) return;
+    // If output is muted, don't barge-in (avoid false positives while silent playback continues).
+    if (speakerMuted || currentAudio.muted || currentAudio.volume === 0) return;
 
     try {
       bargeCtx = new AudioContext();
@@ -457,13 +465,13 @@ async function main() {
       return;
     }
 
-    const threshold = 0.06; // higher threshold to avoid self-audio; tune if needed
-    const minHoldMs = 140;
+    const threshold = 0.09; // more conservative to avoid false positives from small noises
+    const minHoldMs = 260;
     let aboveSince: number | null = null;
 
     const tick = () => {
       if (!bargeAnalyser || !bargeBuf) return;
-      if (!currentAudio || mode !== "voice" || micMuted) {
+      if (!currentAudio || mode !== "voice" || micMuted || speakerMuted || currentAudio.muted || currentAudio.volume === 0) {
         stopBargeInMonitor();
         return;
       }
@@ -480,6 +488,7 @@ async function main() {
         if (now - aboveSince >= minHoldMs) {
           // Interrupt TTS and start listening immediately.
           pendingListenAfterSpeak = false;
+          void api.log("barge_in", { rms, threshold, holdMs: Math.round(now - aboveSince) });
           try {
             currentAudioStop?.();
           } catch {}
@@ -548,7 +557,7 @@ async function main() {
       ui.setError(null);
       if (mode === "text") {
         // Stop mic pipeline, but keep any ongoing TTS playback.
-        stopVoicePipeline({ keepTts: true, keepState: state === "speaking" });
+        stopVoicePipeline({ keepTts: true, keepState: state === "speaking", keepInFlight: true });
       } else {
         // Voice mode: never interrupt ongoing TTS; also don't start listening until TTS ends.
         if (state === "speaking" || currentAudio) {
@@ -570,7 +579,7 @@ async function main() {
       localStorage.setItem(`${STORAGE_KEYS.micMutedPrefix}${siteId}`, micMuted ? "1" : "0");
       void api.log("mic_mute_toggle", { muted: micMuted });
       if (micMuted) {
-        stopVoicePipeline({ keepTts: true, keepState: state === "speaking" });
+        stopVoicePipeline({ keepTts: true, keepState: state === "speaking", keepInFlight: true });
       } else {
         setState("idle");
         void maybeBootGreet("mic_unmute");
@@ -608,7 +617,10 @@ async function main() {
         ui.setError("Switch to Text mode to send a message.");
         return;
       }
-      if (inFlight) return;
+      if (inFlight) {
+        ui.setError("Please wait for the current reply to finish.");
+        return;
+      }
       if (!api.sessionId) {
         ui.setError("Initializing session… Please wait a moment and try again.");
         return;
@@ -620,7 +632,7 @@ async function main() {
       } catch {}
       vad = null;
 
-      inFlight = true;
+      setInFlight(true);
       setState("thinking");
 
       try {
@@ -639,7 +651,7 @@ async function main() {
       } catch (e) {
         stopAll("chat_text", `Chat failed: ${safeErr(e)}`);
       } finally {
-        inFlight = false;
+        setInFlight(false);
         setState("idle");
         // If the user switched to Voice during playback, begin listening after speaking ends.
         const modeNow = mode as "voice" | "text";
