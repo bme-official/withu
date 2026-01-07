@@ -185,7 +185,9 @@ async function main() {
         let done = false;
         let raf: number | null = null;
         audio.preload = "auto";
-        audio.volume = 1.0;
+        // Speaker mute should silence output but keep playback progressing.
+        audio.muted = speakerMuted;
+        audio.volume = speakerMuted ? 0.0 : 1.0;
         const playPromise = audio.play();
         if (playPromise && typeof (playPromise as any).catch === "function") {
           await playPromise;
@@ -461,7 +463,7 @@ async function main() {
 
     const tick = () => {
       if (!bargeAnalyser || !bargeBuf) return;
-      if (!currentAudio || mode !== "voice" || micMuted || speakerMuted) {
+      if (!currentAudio || mode !== "voice" || micMuted) {
         stopBargeInMonitor();
         return;
       }
@@ -580,14 +582,14 @@ async function main() {
       ui.setSpeakerMuted(speakerMuted);
       localStorage.setItem(`${STORAGE_KEYS.ttsMutedPrefix}${siteId}`, speakerMuted ? "1" : "0");
       void api.log("speaker_mute_toggle", { muted: speakerMuted });
-      if (speakerMuted) {
-        try {
-          currentAudio?.pause?.();
-          currentAudio = null;
-        } catch {}
-      } else {
-        void maybeBootGreet("speaker_unmute");
-      }
+      // Do NOT pause/stop current playback; just silence it.
+      try {
+        if (currentAudio) {
+          currentAudio.muted = speakerMuted;
+          currentAudio.volume = speakerMuted ? 0.0 : 1.0;
+        }
+      } catch {}
+      if (!speakerMuted) void maybeBootGreet("speaker_unmute");
     },
     onAcceptConsent() {
       localStorage.setItem(STORAGE_KEYS.consent, "accepted");

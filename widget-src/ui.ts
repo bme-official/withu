@@ -155,8 +155,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     @media (max-width: 640px) {
       .page .header { display: none; }
       .page .footer {
-        position: sticky;
-        bottom: 0;
+        position: relative;
         background: #fff;
         padding-bottom: calc(16px + env(safe-area-inset-bottom));
       }
@@ -531,8 +530,21 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   function updateWithuVh() {
     if (layout !== "page") return;
     try {
-      const h = Math.round((window.visualViewport?.height ?? window.innerHeight ?? 0) || 0);
+      const vv = window.visualViewport;
+      const h = Math.round((vv?.height ?? window.innerHeight ?? 0) || 0);
       if (h > 0) host.style.setProperty("--withu-vh", `${h}px`);
+      // iOS Safari: fixed overlays can "jump" when the keyboard appears.
+      // Follow the visual viewport so footer/composer stay in view and the log shrinks.
+      if (vv && h > 0) {
+        const top = Math.round(vv.offsetTop || 0);
+        host.style.top = `${top}px`;
+        host.style.height = `${h}px`;
+        host.style.bottom = "auto";
+      } else {
+        host.style.top = "0";
+        host.style.height = "";
+        host.style.bottom = "0";
+      }
     } catch {}
   }
   function setupVhListeners() {
