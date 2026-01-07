@@ -177,13 +177,15 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       /* Text mode: log -> composer (input) -> footer (fixed controls) */
       .page .panel.open:not(.voiceOnly) {
         grid-template-columns: 1fr;
-        grid-template-rows: 1fr auto auto;
+        /* Keep some history visible even when the keyboard is open */
+        grid-template-rows: minmax(120px, 1fr) auto auto;
         grid-template-areas:
           "log"
           "composer"
           "footer";
       }
       .page .panel.open:not(.voiceOnly) .hero { display: none; }
+      .page .log { min-height: 120px; }
 
       /* iOS Safari: prevent focus-zoom by keeping inputs >= 16px */
       textarea { font-size: 16px; }
