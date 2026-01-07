@@ -55,6 +55,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   const style = document.createElement("style");
   style.textContent = `
     :host, * { box-sizing: border-box; }
+    :host { -webkit-text-size-adjust: 100%; }
     .bubble {
       width: 56px; height: 56px; border-radius: 9999px;
       background: #111827; color: white; border: 1px solid rgba(255,255,255,0.12);
@@ -183,6 +184,10 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
           "footer";
       }
       .page .panel.open:not(.voiceOnly) .hero { display: none; }
+
+      /* iOS Safari: prevent focus-zoom by keeping inputs >= 16px */
+      textarea { font-size: 16px; }
+      button { font-size: 16px; }
     }
     .header {
       display:flex; align-items:center; justify-content:space-between;
