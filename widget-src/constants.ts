@@ -34,8 +34,6 @@ export const UI_TEXT = {
   consentAccept: "I agree",
   consentReject: "No thanks",
   intimacyLabel: "Intimacy",
-  micMuted: "mic muted",
-  speakerMuted: "speaker muted",
 } as const;
 
 

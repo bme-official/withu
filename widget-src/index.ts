@@ -205,7 +205,7 @@ async function main() {
     ui.setConsentVisible(!hasConsent());
   }
 
-  function stopVoicePipeline() {
+  function stopVoicePipeline(opts?: { keepTts?: boolean; keepState?: boolean }) {
     try {
       vad?.stop({ stopStream: true });
     } catch {}
@@ -219,11 +219,13 @@ async function main() {
     } catch {}
     stream = null;
     try {
-      currentAudio?.pause?.();
-      currentAudio = null;
+      if (!opts?.keepTts) {
+        currentAudio?.pause?.();
+        currentAudio = null;
+      }
     } catch {}
     inFlight = false;
-    setState("idle");
+    if (!opts?.keepState) setState("idle");
   }
 
   function stopAll(phase: string, message?: string) {
@@ -372,7 +374,10 @@ async function main() {
     onToggleOpen(open) {
       if (open) void api.log("widget_open");
       ensureConsentUi();
-        if (open) void ensureVoiceListening("open");
+      if (open) {
+        if (bootGreeted) void ensureVoiceListening("open");
+        else void maybeBootGreet("open");
+      }
     },
     onUserGesture() {
       gotUserGesture = true;
@@ -383,12 +388,13 @@ async function main() {
       ui.setMode(mode);
       ui.setError(null);
       if (mode === "text") {
-        // safety: switching mode stops voice pipeline
-        stopVoicePipeline();
+        // Stop mic pipeline, but keep any ongoing TTS playback.
+        stopVoicePipeline({ keepTts: true, keepState: state === "speaking" });
       } else {
         // voice mode: keep idle; start is enabled only after consent
         setState("idle");
-          void ensureVoiceListening("mode_switch");
+        if (bootGreeted) void ensureVoiceListening("mode_switch");
+        else void maybeBootGreet("mode_switch");
       }
       ensureConsentUi();
     },
@@ -398,10 +404,11 @@ async function main() {
       localStorage.setItem(`${STORAGE_KEYS.micMutedPrefix}${siteId}`, micMuted ? "1" : "0");
       void api.log("mic_mute_toggle", { muted: micMuted });
       if (micMuted) {
-        stopVoicePipeline();
+        stopVoicePipeline({ keepTts: true, keepState: state === "speaking" });
       } else {
         setState("idle");
-        void ensureVoiceListening("mic_unmute");
+        if (bootGreeted) void ensureVoiceListening("mic_unmute");
+        else void maybeBootGreet("mic_unmute");
       }
     },
     onToggleSpeakerMuted(next) {
@@ -422,8 +429,7 @@ async function main() {
       localStorage.setItem(STORAGE_KEYS.consent, "accepted");
       void api.log("consent_accept");
       ensureConsentUi();
-        void ensureVoiceListening("consent_accept");
-        void maybeBootGreet("consent_accept");
+      void maybeBootGreet("consent_accept");
     },
     onRejectConsent() {
       localStorage.setItem(STORAGE_KEYS.consent, "rejected");
@@ -512,11 +518,9 @@ async function main() {
   speakerMuted = localStorage.getItem(`${STORAGE_KEYS.ttsMutedPrefix}${siteId}`) === "1";
   ui.setMicMuted(micMuted);
   ui.setSpeakerMuted(speakerMuted);
-  // Try greeting once we have both: user gesture + session
+  // Start with a short greeting (requires a user gesture due to autoplay restrictions).
+  // After greeting, we will begin listening automatically if consent is granted.
   void maybeBootGreet("boot");
-
-  // Auto-start voice listening when possible (no Start button).
-  void ensureVoiceListening("boot");
 }
 
 void main();

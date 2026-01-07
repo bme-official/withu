@@ -189,37 +189,59 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       flex: none;
     }
     .hero {
-      padding: 18px 16px 10px 16px;
+      padding: 0;
       background: linear-gradient(180deg, #f9fafb, rgba(249,250,251,0.0));
       border-bottom: 1px solid rgba(0,0,0,0.06);
       display:flex;
       flex-direction: column;
       align-items:center;
       gap: 10px;
+      min-height: 260px; /* ensure height even if children are absolutely positioned */
     }
-    .page .hero { padding-top: 28px; }
+    .page .hero { padding-top: 0; }
     .heroAvatar {
-      width: 116px; height: 116px; border-radius: 9999px;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
       overflow:hidden;
-      border: 2px solid rgba(0,0,0,0.10);
-      box-shadow: 0 20px 45px rgba(0,0,0,0.12);
-      background: linear-gradient(135deg, #111827, #6d28d9);
+      border: none;
+      box-shadow: none;
+      background: #111827;
     }
     .heroAvatar.listening {
-      border-color: rgba(16,185,129,0.65);
-      box-shadow: 0 0 0 6px rgba(16,185,129,0.16), 0 20px 45px rgba(0,0,0,0.12);
-      animation: pulse 1.35s ease-in-out infinite;
+      filter: saturate(1.05) brightness(1.02);
     }
     .heroAvatar.thinking {
-      border-color: rgba(59,130,246,0.65);
-      box-shadow: 0 0 0 6px rgba(59,130,246,0.14), 0 20px 45px rgba(0,0,0,0.12);
+      filter: saturate(1.03) brightness(1.01);
     }
     .heroAvatar.speaking {
-      border-color: rgba(109,40,217,0.65);
-      box-shadow: 0 0 0 7px rgba(109,40,217,0.18), 0 20px 45px rgba(0,0,0,0.12);
-      animation: pulse 1.2s ease-in-out infinite;
+      filter: saturate(1.06) brightness(1.03);
     }
     .heroAvatar img { width:100%; height:100%; object-fit:cover; display:block; }
+    .heroBottom {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 18px 16px 14px 16px;
+      display:flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      color: white;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    }
+    .heroBottom::before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 160px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.55));
+      pointer-events: none;
+    }
+    .heroBottom > * { position: relative; z-index: 1; }
     .heroName { font-weight: 800; font-size: 16px; }
     .heroSub { font-size: 12px; opacity: 0.7; text-align:center; }
     .heroStatusLine {
@@ -526,6 +548,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   // Page "hero" (center avatar + speaking feel)
   const hero = document.createElement("div");
   hero.className = "hero";
+  hero.style.position = "relative";
   const heroAvatar = document.createElement("div");
   heroAvatar.className = "heroAvatar";
   const heroAvatarImg = document.createElement("img");
@@ -557,10 +580,14 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   heroStatusLine.appendChild(heroStatusDot);
   heroStatusLine.appendChild(heroStatusText);
 
+  const heroBottom = document.createElement("div");
+  heroBottom.className = "heroBottom";
+  heroBottom.appendChild(heroName);
+  heroBottom.appendChild(heroSub);
+  heroBottom.appendChild(heroStatusLine);
+
   hero.appendChild(heroAvatar);
-  hero.appendChild(heroName);
-  hero.appendChild(heroSub);
-  hero.appendChild(heroStatusLine);
+  hero.appendChild(heroBottom);
 
   const log = document.createElement("div");
   log.className = "log";
@@ -693,13 +720,15 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
 
   function renderMicMuteFor(el: HTMLElement) {
     el.classList.toggle("muted", micMuted);
-    el.innerHTML = micMuted ? `${micOffSvg}<span class="mutedLabel">${UI_TEXT.micMuted}</span>` : micSvg;
+    el.innerHTML = micMuted ? micOffSvg : micSvg;
     el.setAttribute("aria-pressed", micMuted ? "true" : "false");
+    el.setAttribute("aria-label", micMuted ? "Mic muted" : "Mic on");
   }
   function renderSpeakerMuteFor(el: HTMLElement) {
     el.classList.toggle("muted", speakerMuted);
-    el.innerHTML = speakerMuted ? `${speakerOffSvg}<span class="mutedLabel">${UI_TEXT.speakerMuted}</span>` : speakerSvg;
+    el.innerHTML = speakerMuted ? speakerOffSvg : speakerSvg;
     el.setAttribute("aria-pressed", speakerMuted ? "true" : "false");
+    el.setAttribute("aria-label", speakerMuted ? "Speaker muted" : "Speaker on");
   }
   function renderMutes() {
     renderMicMuteFor(micMuteBtn);
