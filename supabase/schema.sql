@@ -37,6 +37,11 @@ create table if not exists site_profiles (
   persona_prompt text not null default '',
   -- optional hint for Web Speech voice selection (client-side)
   tts_voice_hint text,
+  -- server-side TTS provider selection
+  tts_provider text not null default 'openai' check (tts_provider in ('openai','elevenlabs')),
+  -- ElevenLabs settings (used when tts_provider='elevenlabs')
+  eleven_voice_id text,
+  eleven_model_id text,
   -- JSON configs (editable via admin UI). Keep defaults empty objects.
   greeting_templates jsonb not null default '{}'::jsonb,
   cta_config jsonb not null default '{}'::jsonb,
@@ -85,6 +90,12 @@ alter table if exists sessions add column if not exists created_at timestamptz;
 alter table if exists site_profiles add column if not exists greeting_templates jsonb;
 alter table if exists site_profiles add column if not exists cta_config jsonb;
 alter table if exists site_profiles add column if not exists chat_config jsonb;
+alter table if exists site_profiles add column if not exists tts_provider text;
+alter table if exists site_profiles add column if not exists eleven_voice_id text;
+alter table if exists site_profiles add column if not exists eleven_model_id text;
+
+-- best-effort defaults for existing projects (safe)
+update site_profiles set tts_provider = 'openai' where tts_provider is null;
 
 -- Indexes (run AFTER migrations)
 create index if not exists idx_sessions_site_id_created_at on sessions(site_id, created_at desc);

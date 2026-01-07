@@ -99,6 +99,40 @@ export default async function AdminSitePage({
                 <code className="rounded bg-zinc-100 px-1">model=tts-1-hd</code>, etc.
               </div>
             </label>
+
+            <label className="text-sm">
+              TTS provider
+              <select
+                className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-zinc-900"
+                name="ttsProvider"
+                defaultValue={(prof as any)?.tts_provider ?? "openai"}
+              >
+                <option value="openai">OpenAI (default)</option>
+                <option value="elevenlabs">ElevenLabs</option>
+              </select>
+            </label>
+
+            <label className="text-sm">
+              ElevenLabs voice_id (optional)
+              <input
+                className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-zinc-900 placeholder:text-zinc-400"
+                name="elevenVoiceId"
+                placeholder="e.g. 6wVqsvW3l2lSDpdGxpCN"
+                defaultValue={(prof as any)?.eleven_voice_id ?? ""}
+              />
+              <div className="mt-1 text-xs text-zinc-500">Used only when provider is ElevenLabs.</div>
+            </label>
+
+            <label className="text-sm md:col-span-2">
+              ElevenLabs model_id (optional)
+              <input
+                className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-zinc-900 placeholder:text-zinc-400"
+                name="elevenModelId"
+                placeholder="e.g. eleven_multilingual_v2"
+                defaultValue={(prof as any)?.eleven_model_id ?? ""}
+              />
+              <div className="mt-1 text-xs text-zinc-500">Leave blank to use server default.</div>
+            </label>
           </div>
         </div>
 

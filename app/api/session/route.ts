@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
           avatar_url: null,
           persona_prompt: "",
           tts_voice_hint: null,
+          tts_provider: "openai",
         },
         { onConflict: "site_id", ignoreDuplicates: true },
       );

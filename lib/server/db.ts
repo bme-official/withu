@@ -15,6 +15,9 @@ export type SiteProfileRow = {
   avatar_url: string | null;
   persona_prompt: string;
   tts_voice_hint: string | null;
+  tts_provider?: "openai" | "elevenlabs" | string | null;
+  eleven_voice_id?: string | null;
+  eleven_model_id?: string | null;
   created_at?: string;
   updated_at?: string;
   greeting_templates?: unknown;
@@ -220,7 +223,9 @@ export async function getSiteProfile(siteId: string): Promise<SiteProfileRow | n
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("site_profiles")
-    .select("site_id,display_name,avatar_url,persona_prompt,tts_voice_hint,greeting_templates,cta_config,chat_config")
+    .select(
+      "site_id,display_name,avatar_url,persona_prompt,tts_voice_hint,tts_provider,eleven_voice_id,eleven_model_id,greeting_templates,cta_config,chat_config",
+    )
     .eq("site_id", siteId)
     .maybeSingle();
   if (error) throw new Error(`supabase site_profiles select: ${error.message}`);
@@ -244,6 +249,9 @@ export async function upsertSiteProfile(input: {
   avatarUrl?: string | null;
   personaPrompt?: string;
   ttsVoiceHint?: string | null;
+  ttsProvider?: "openai" | "elevenlabs" | null;
+  elevenVoiceId?: string | null;
+  elevenModelId?: string | null;
   greetingTemplates?: unknown;
   ctaConfig?: unknown;
   chatConfig?: unknown;
@@ -257,6 +265,9 @@ export async function upsertSiteProfile(input: {
   if (typeof input.avatarUrl !== "undefined") row.avatar_url = input.avatarUrl;
   if (typeof input.personaPrompt === "string") row.persona_prompt = input.personaPrompt;
   if (typeof input.ttsVoiceHint !== "undefined") row.tts_voice_hint = input.ttsVoiceHint;
+  if (typeof input.ttsProvider !== "undefined") row.tts_provider = input.ttsProvider;
+  if (typeof input.elevenVoiceId !== "undefined") row.eleven_voice_id = input.elevenVoiceId;
+  if (typeof input.elevenModelId !== "undefined") row.eleven_model_id = input.elevenModelId;
   if (typeof input.greetingTemplates !== "undefined") row.greeting_templates = input.greetingTemplates;
   if (typeof input.ctaConfig !== "undefined") row.cta_config = input.ctaConfig;
   if (typeof input.chatConfig !== "undefined") row.chat_config = input.chatConfig;

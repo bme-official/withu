@@ -10,6 +10,8 @@ const EnvSchema = z.object({
   OPENAI_INTIMACY_MODEL: z.string().optional(),
   OPENAI_TTS_MODEL: z.string().optional(),
   OPENAI_TTS_VOICE: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
+  ELEVENLABS_TTS_MODEL: z.string().optional(),
   // Optional: enable the additional LLM call for AI-driven intimacy scoring.
   // Default off for lower latency.
   WITHU_AI_INTIMACY: z.string().optional(),

@@ -28,6 +28,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ siteId: st
   const personaPrompt = String(fd.get("personaPrompt") || "");
   const ttsVoiceHintRaw = String(fd.get("ttsVoiceHint") || "").trim();
   const ttsVoiceHint = ttsVoiceHintRaw ? ttsVoiceHintRaw : null;
+  const ttsProviderRaw = String(fd.get("ttsProvider") || "").trim().toLowerCase();
+  const ttsProvider = ttsProviderRaw === "elevenlabs" ? "elevenlabs" : ttsProviderRaw === "openai" ? "openai" : null;
+  const elevenVoiceIdRaw = String(fd.get("elevenVoiceId") || "").trim();
+  const elevenVoiceId = elevenVoiceIdRaw ? elevenVoiceIdRaw : null;
+  const elevenModelIdRaw = String(fd.get("elevenModelId") || "").trim();
+  const elevenModelId = elevenModelIdRaw ? elevenModelIdRaw : null;
 
   try {
     const greetingTemplates = parseJsonOrThrow(String(fd.get("greetingTemplates") || ""), "greetingTemplates");
@@ -40,6 +46,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ siteId: st
       avatarUrl,
       personaPrompt,
       ttsVoiceHint,
+      ttsProvider,
+      elevenVoiceId,
+      elevenModelId,
       greetingTemplates,
       chatConfig,
       ctaConfig,
