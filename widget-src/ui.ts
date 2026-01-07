@@ -274,7 +274,8 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     .listenBars span {
       width: 3px;
       height: 12px;
-      background: rgba(17,24,39,0.65);
+      /* brighter for visibility on the hero overlay */
+      background: rgba(255,255,255,0.92);
       border-radius: 9999px;
       transform-origin: bottom;
       transform: scaleY(0.15);
@@ -916,8 +917,8 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
         heroStatusLabel.textContent = txt;
         // dots for thinking/speaking
         dots.style.display = state === "thinking" || state === "speaking" ? "inline-flex" : "none";
-        // listening bars only in listening state
-        listenBars.style.display = state === "listening" ? "inline-flex" : "none";
+        // Show bars in Ready/Listening so users always see "mic activity" area.
+        listenBars.style.display = state === "thinking" || state === "speaking" ? "none" : "inline-flex";
       };
       voiceUi(s);
     },
@@ -925,9 +926,12 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       // Map RMS (roughly 0..0.2) into 0..1 for UI.
       const lvl = Math.max(0, Math.min(1, (rms - 0.01) / 0.09));
       const spans = listenBars.querySelectorAll("span");
-      const a = 0.15 + lvl * 0.85;
-      const b = 0.12 + Math.min(1, lvl * 0.95) * 0.88;
-      const c = 0.10 + Math.min(1, lvl * 0.75) * 0.80;
+      // Add small phase offsets so the 3 bars don't move identically.
+      const t = performance.now() / 1000;
+      const wobble = (phase: number) => (Math.sin(t * 11 + phase) + 1) / 2; // 0..1
+      const a = 0.10 + lvl * (0.85 + 0.10 * wobble(0.0));
+      const b = 0.10 + lvl * (0.85 + 0.10 * wobble(2.2));
+      const c = 0.10 + lvl * (0.85 + 0.10 * wobble(4.4));
       (spans[0] as HTMLElement | undefined)?.style.setProperty("transform", `scaleY(${a.toFixed(3)})`);
       (spans[1] as HTMLElement | undefined)?.style.setProperty("transform", `scaleY(${b.toFixed(3)})`);
       (spans[2] as HTMLElement | undefined)?.style.setProperty("transform", `scaleY(${c.toFixed(3)})`);
