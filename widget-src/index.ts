@@ -132,38 +132,16 @@ async function main() {
     }
   }
 
-  function pickBootGreeting(level: number): string {
-    const lv = Math.max(1, Math.min(5, Math.round(level)));
-    const byLv: Record<number, string[]> = {
-      1: [
-        "Hi, I'm Mirai Aizawa. Want to chat for a minute?",
-        "Hey, it's Mirai. What would you like to talk about today?",
-        "Hi there. I'm Mirai Aizawa. Tell me what's on your mind.",
-      ],
-      2: [
-        "Hi again. I'm Mirai. How's your day going so far?",
-        "Hey, welcome back. Want to tell me what you're up to right now?",
-        "Hi. I'm here. What should we talk about first?",
-      ],
-      3: [
-        "Hey. It's good to see you again. What kind of mood are you in today?",
-        "Hi. I'm happy you're here. What are you thinking about?",
-        "Hey. Let's catch up. Anything fun or stressful happening today?",
-      ],
-      4: [
-        "Hi. I missed talking with you. How are you, honestly?",
-        "Hey. I'm here with you. Want to tell me what you need right now?",
-        "Hi. Let's do a quick check-in. What's been on your mind lately?",
-      ],
-      5: [
-        "Hey. I'm really happy you're here. Tell me how you're feeling today.",
-        "Hi. Let's talk. I want to hear what you've been going through.",
-        "Hey. I'm with you. What do you want to share first?",
-      ],
-    };
-    const arr = byLv[lv] ?? byLv[1];
-    const picked = arr[Math.floor(Math.random() * arr.length)] ?? arr[0]!;
-    return stripEmojis(picked);
+  async function getBootGreeting(reason: string): Promise<string> {
+    try {
+      const res = await api.greet(reason);
+      const t = stripEmojis(String(res.greeting || "")).trim();
+      if (t) return t;
+      throw new Error("empty_greet");
+    } catch {
+      // fallback if greet API is unavailable
+      return stripEmojis("Hi, I'm Mirai Aizawa. Want to chat for a minute?");
+    }
   }
 
   async function speakWithServerTts(text: string): Promise<{ ttsMs: number } | null> {
@@ -469,7 +447,7 @@ async function main() {
     if (!api.sessionId) return;
     if (speakerMuted) return;
 
-    if (!bootGreetingText) bootGreetingText = pickBootGreeting(intimacyLevel ?? 1);
+    if (!bootGreetingText) bootGreetingText = await getBootGreeting(reason);
     if (!bootGreetingDisplayed) {
       bootGreetingDisplayed = true;
       // Requirement: keep the greeting in the chat log.

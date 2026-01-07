@@ -15,6 +15,9 @@ export type SiteProfileRow = {
   avatar_url: string | null;
   persona_prompt: string;
   tts_voice_hint: string | null;
+  greeting_templates?: unknown;
+  cta_config?: unknown;
+  chat_config?: unknown;
 };
 
 export async function createSessionRow(input: { siteId: string; userAgent: string; ip: string }) {
@@ -215,11 +218,49 @@ export async function getSiteProfile(siteId: string): Promise<SiteProfileRow | n
   const supabaseAdmin = getSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("site_profiles")
-    .select("site_id,display_name,avatar_url,persona_prompt,tts_voice_hint")
+    .select("site_id,display_name,avatar_url,persona_prompt,tts_voice_hint,greeting_templates,cta_config,chat_config")
     .eq("site_id", siteId)
     .maybeSingle();
   if (error) throw new Error(`supabase site_profiles select: ${error.message}`);
   return (data as SiteProfileRow | null) ?? null;
+}
+
+export async function listSiteProfiles(limit = 200): Promise<Array<Pick<SiteProfileRow, "site_id" | "display_name" | "updated_at"> & { updated_at?: string }>> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("site_profiles")
+    .select("site_id,display_name,updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`supabase site_profiles list: ${error.message}`);
+  return (data as any[]) ?? [];
+}
+
+export async function upsertSiteProfile(input: {
+  siteId: string;
+  displayName?: string;
+  avatarUrl?: string | null;
+  personaPrompt?: string;
+  ttsVoiceHint?: string | null;
+  greetingTemplates?: unknown;
+  ctaConfig?: unknown;
+  chatConfig?: unknown;
+}): Promise<void> {
+  const supabaseAdmin = getSupabaseAdmin();
+  const row: any = {
+    site_id: input.siteId,
+    updated_at: new Date().toISOString(),
+  };
+  if (typeof input.displayName === "string") row.display_name = input.displayName;
+  if (typeof input.avatarUrl !== "undefined") row.avatar_url = input.avatarUrl;
+  if (typeof input.personaPrompt === "string") row.persona_prompt = input.personaPrompt;
+  if (typeof input.ttsVoiceHint !== "undefined") row.tts_voice_hint = input.ttsVoiceHint;
+  if (typeof input.greetingTemplates !== "undefined") row.greeting_templates = input.greetingTemplates;
+  if (typeof input.ctaConfig !== "undefined") row.cta_config = input.ctaConfig;
+  if (typeof input.chatConfig !== "undefined") row.chat_config = input.chatConfig;
+
+  const { error } = await supabaseAdmin.from("site_profiles").upsert(row, { onConflict: "site_id" });
+  if (error) throw new Error(`supabase site_profiles upsert: ${error.message}`);
 }
 
 export async function getSessionSiteId(sessionId: string): Promise<string | null> {

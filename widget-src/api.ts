@@ -7,6 +7,7 @@ export type ApiClient = {
   getConfig(): Promise<{ displayName: string; avatarUrl: string | null; ttsVoiceHint: string | null }>;
   createSession(userId?: string | null): Promise<{ sessionId: string; sessionToken: string; userId: string; intimacy: { level: number; xp: number } }>;
   log(type: string, meta?: unknown): Promise<void>;
+  greet(reason?: string): Promise<{ greeting: string }>;
   asr(audio: Blob): Promise<{ text: string }>;
   chat(userText: string, inputMode: "voice" | "text"): Promise<{ assistantText: string; intimacy: { level: number; xp: number; nextXp: number | null; delta: number } | null }>;
   ttsAudio(text: string): Promise<Blob>;
@@ -86,6 +87,13 @@ export function createApiClient(baseUrl: string, siteId: string): ApiClient {
       } catch {
         // Logging failures must never break UX
       }
+    },
+    async greet(reason) {
+      if (!state.sessionId || !state.sessionToken) throw new Error("missing session");
+      return await requestJson<{ greeting: string }>("/api/greet", {
+        method: "POST",
+        body: JSON.stringify({ sessionId: state.sessionId, sessionToken: state.sessionToken, reason: reason ?? null }),
+      });
     },
     async asr(audio: Blob) {
       if (!state.sessionId || !state.sessionToken) throw new Error("missing session");

@@ -13,6 +13,9 @@ const EnvSchema = z.object({
   // Optional: enable the additional LLM call for AI-driven intimacy scoring.
   // Default off for lower latency.
   WITHU_AI_INTIMACY: z.string().optional(),
+  // Admin UI (optional). If unset, /admin is effectively disabled.
+  ADMIN_PASSWORD: z.string().optional(),
+  ADMIN_SESSION_SECRET: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof EnvSchema>;

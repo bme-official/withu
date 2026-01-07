@@ -37,6 +37,10 @@ create table if not exists site_profiles (
   persona_prompt text not null default '',
   -- optional hint for Web Speech voice selection (client-side)
   tts_voice_hint text,
+  -- JSON configs (editable via admin UI). Keep defaults empty objects.
+  greeting_templates jsonb not null default '{}'::jsonb,
+  cta_config jsonb not null default '{}'::jsonb,
+  chat_config jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -76,6 +80,11 @@ alter table if exists sessions add column if not exists site_id text;
 alter table if exists sessions add column if not exists user_agent text;
 alter table if exists sessions add column if not exists ip text;
 alter table if exists sessions add column if not exists created_at timestamptz;
+
+-- Backfill / migrate for site_profiles (safe to re-run)
+alter table if exists site_profiles add column if not exists greeting_templates jsonb;
+alter table if exists site_profiles add column if not exists cta_config jsonb;
+alter table if exists site_profiles add column if not exists chat_config jsonb;
 
 -- Indexes (run AFTER migrations)
 create index if not exists idx_sessions_site_id_created_at on sessions(site_id, created_at desc);
