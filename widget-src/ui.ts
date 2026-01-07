@@ -722,13 +722,13 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     el.classList.toggle("muted", micMuted);
     el.innerHTML = micMuted ? micOffSvg : micSvg;
     el.setAttribute("aria-pressed", micMuted ? "true" : "false");
-    el.setAttribute("aria-label", micMuted ? "Mic muted" : "Mic on");
+    el.setAttribute("aria-label", "Mic");
   }
   function renderSpeakerMuteFor(el: HTMLElement) {
     el.classList.toggle("muted", speakerMuted);
     el.innerHTML = speakerMuted ? speakerOffSvg : speakerSvg;
     el.setAttribute("aria-pressed", speakerMuted ? "true" : "false");
-    el.setAttribute("aria-label", speakerMuted ? "Speaker muted" : "Speaker on");
+    el.setAttribute("aria-label", "Speaker");
   }
   function renderMutes() {
     renderMicMuteFor(micMuteBtn);
