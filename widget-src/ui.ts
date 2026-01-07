@@ -152,8 +152,8 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       .page .footer { position: sticky; bottom: 0; background: #fff; }
       .page .footerControls { display: flex; }
 
-      /* Bigger avatar on voice mode */
-      .page .panel.voiceOnly .heroAvatar { width: 168px; height: 168px; }
+      /* Voice mode: hero avatar should fill the entire hero area (full-bleed) */
+      .page .panel.voiceOnly .heroAvatar { width: 100%; height: 100%; }
 
       /* Voice mode: hero (avatar+status) then bottom controls only */
       .page .panel.voiceOnly.open {
