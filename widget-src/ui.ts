@@ -243,7 +243,6 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     }
     .heroBottom > * { position: relative; z-index: 1; }
     .heroName { font-weight: 800; font-size: 16px; }
-    .heroSub { font-size: 12px; opacity: 0.7; text-align:center; }
     .heroStatusLine {
       display:flex;
       align-items:center;
@@ -558,9 +557,6 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   const heroName = document.createElement("div");
   heroName.className = "heroName";
   heroName.textContent = "Mirai Aizawa";
-  const heroSub = document.createElement("div");
-  heroSub.className = "heroSub";
-  heroSub.textContent = UI_TEXT.heroPrompt;
 
   const heroStatusLine = document.createElement("div");
   heroStatusLine.className = "heroStatusLine";
@@ -581,9 +577,8 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
 
   const heroBottom = document.createElement("div");
   heroBottom.className = "heroBottom";
-  heroBottom.appendChild(heroName);
-  heroBottom.appendChild(heroSub);
   heroBottom.appendChild(heroStatusLine);
+  heroBottom.appendChild(heroName);
 
   hero.appendChild(heroAvatar);
   hero.appendChild(heroBottom);
@@ -741,10 +736,11 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     panel.classList.toggle("voiceOnly", currentMode === "voice");
     // in voice mode, hide text input completely
     composer.style.display = currentMode === "text" ? "block" : "none";
+    // Mic mute only matters in voice mode; Speaker mute should be available in both modes.
     micMuteBtn.style.display = currentMode === "voice" ? "inline-flex" : "none";
-    speakerMuteBtn.style.display = currentMode === "voice" ? "inline-flex" : "none";
     footerMicMuteBtn.style.display = currentMode === "voice" ? "inline-flex" : "none";
-    footerSpeakerMuteBtn.style.display = currentMode === "voice" ? "inline-flex" : "none";
+    speakerMuteBtn.style.display = "inline-flex";
+    footerSpeakerMuteBtn.style.display = "inline-flex";
     renderMutes();
   }
 
@@ -807,7 +803,6 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   });
 
   speakerMuteBtn.addEventListener("click", () => {
-    if (currentMode !== "voice") return;
     speakerMuted = !speakerMuted;
     cb.onToggleSpeakerMuted(speakerMuted);
     renderMutes();
@@ -820,7 +815,6 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   });
 
   footerSpeakerMuteBtn.addEventListener("click", () => {
-    if (currentMode !== "voice") return;
     speakerMuted = !speakerMuted;
     cb.onToggleSpeakerMuted(speakerMuted);
     renderMutes();
