@@ -887,6 +887,9 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     { capture: true },
   );
 
+  // Listening bars smoothing state (make bars move differently even with same RMS input)
+  const barPrev = [0.12, 0.10, 0.08];
+
   return {
     mount() {
       if (document.getElementById(hostId)) return;
@@ -926,12 +929,25 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       // Map RMS (roughly 0..0.2) into 0..1 for UI.
       const lvl = Math.max(0, Math.min(1, (rms - 0.01) / 0.09));
       const spans = listenBars.querySelectorAll("span");
-      // Add small phase offsets so the 3 bars don't move identically.
+      // Stronger, de-correlated motion:
+      // - each bar has its own "wobble" frequency/phase
+      // - each bar uses a different smoothing constant (fast/medium/slow)
+      // - wobble amplitude is intentionally noticeable
       const t = performance.now() / 1000;
-      const wobble = (phase: number) => (Math.sin(t * 11 + phase) + 1) / 2; // 0..1
-      const a = 0.10 + lvl * (0.85 + 0.10 * wobble(0.0));
-      const b = 0.10 + lvl * (0.85 + 0.10 * wobble(2.2));
-      const c = 0.10 + lvl * (0.85 + 0.10 * wobble(4.4));
+      const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+      const wob = (freq: number, phase: number) => Math.sin(t * freq + phase); // -1..1
+      const targets = [
+        clamp01(lvl + 0.28 * wob(9.5, 0.2)),
+        clamp01(lvl + 0.34 * wob(7.2, 2.0)),
+        clamp01(lvl + 0.22 * wob(12.8, 4.1)),
+      ];
+      const alphas = [0.55, 0.28, 0.16]; // fast/medium/slow
+      for (let i = 0; i < 3; i++) {
+        barPrev[i] = barPrev[i] + (targets[i] - barPrev[i]) * alphas[i];
+      }
+      const a = 0.10 + barPrev[0] * 0.90;
+      const b = 0.10 + barPrev[1] * 0.90;
+      const c = 0.10 + barPrev[2] * 0.90;
       (spans[0] as HTMLElement | undefined)?.style.setProperty("transform", `scaleY(${a.toFixed(3)})`);
       (spans[1] as HTMLElement | undefined)?.style.setProperty("transform", `scaleY(${b.toFixed(3)})`);
       (spans[2] as HTMLElement | undefined)?.style.setProperty("transform", `scaleY(${c.toFixed(3)})`);
