@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => null);
     const parsed = TtsSchema.safeParse(body);
-    if (!parsed.success) return errorJson(400, "invalid_body");
+    if (!parsed.success) return json({ ok: false, error: "invalid_body" }, { status: 400, headers: cors });
 
     const { sessionId, sessionToken, text } = parsed.data;
     const auth = await assertSessionToken(sessionId, sessionToken);
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     // Latency tuning: keep TTS input reasonably short.
     const input = String(text || "").slice(0, 900);
-    if (!input.trim()) return errorJson(400, "empty_text");
+    if (!input.trim()) return json({ ok: false, error: "empty_text" }, { status: 400, headers: cors });
 
     const t0 = performance.now();
     let buf: Buffer;
@@ -122,10 +122,18 @@ export async function POST(req: NextRequest) {
     // @ts-expect-error: from rateLimitOrThrow
     const status = e?.status ?? 500;
     if (status === 429) return json({ ok: false, error: "rate_limited" }, { status: 429, headers: cors });
-    return json(
-      { ok: false, error: "internal_error", message: e instanceof Error ? e.message : String(e) },
-      { status: 500, headers: cors },
-    );
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "missing_ELEVENLABS_API_KEY") {
+      return json({ ok: false, error: "missing_elevenlabs_api_key" }, { status: 400, headers: cors });
+    }
+    if (msg === "missing_eleven_voice_id") {
+      return json({ ok: false, error: "missing_eleven_voice_id" }, { status: 400, headers: cors });
+    }
+    if (msg.startsWith("elevenlabs_tts_failed_http_")) {
+      // e.g. invalid API key (401) / quota etc.
+      return json({ ok: false, error: "elevenlabs_tts_failed", message: msg }, { status: 502, headers: cors });
+    }
+    return json({ ok: false, error: "internal_error", message: msg }, { status: 500, headers: cors });
   }
 }
 
