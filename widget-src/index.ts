@@ -126,6 +126,8 @@ async function main() {
   let bootGreetingDisplayed = false;
   let bootGreetingSpoken = false;
   let bootGreetingInFlight: Promise<void> | null = null;
+  let voiceTurnActive = false;
+  let pendingStopVoiceAfterTurn = false;
   let intimacyLevel: number | null = null;
 
   function stripEmojis(text: string): string {
@@ -152,7 +154,13 @@ async function main() {
     text: string,
     stream?: { setProgress(ratio: number): void; finish(): void },
   ): Promise<{ ttsMs: number } | null> {
-    if (speakerMuted) return null;
+    // If muted, don't generate/play audio, but still complete the "speaking" turn and reveal text.
+    if (speakerMuted) {
+      try {
+        stream?.finish();
+      } catch {}
+      return { ttsMs: 0 };
+    }
     try {
       const t0 = performance.now();
       // Small in-memory cache to avoid re-generating identical audio (e.g., repeated greetings).
@@ -326,6 +334,7 @@ async function main() {
     if (!bootGreetingSpoken) return;
     // If currently playing audio, do not start listening (wait until it finishes).
     if (currentAudio) return;
+    if (pendingStopVoiceAfterTurn) return;
 
     // ensure mic stream
     if (!stream) {
@@ -343,6 +352,7 @@ async function main() {
     if (!recorder) recorder = createRecorder(stream);
     vad = createVad(stream, recorder, {
       onSpeechStart() {
+        voiceTurnActive = true;
         void api.log("vad_speech_start");
       },
       onDebug({ rms }) {
@@ -350,7 +360,8 @@ async function main() {
         if (state === "listening") ui.setListeningRms(rms);
       },
       async onSpeechEnd({ durationMs, sizeBytes, blob }) {
-        if (mode !== "voice") return;
+        // Even if user switches to Text mid-utterance, finish the current voice turn.
+        if (!voiceTurnActive) return;
         if (state !== "listening" || inFlight) return;
         setInFlight(true);
 
@@ -403,14 +414,22 @@ async function main() {
 
           setState(reduceState(state, { type: "TTS_END" }));
           setInFlight(false);
+          voiceTurnActive = false;
           // auto continue listening
           setState("idle");
-          void ensureVoiceListening("auto_continue");
+          if (pendingStopVoiceAfterTurn || mode === "text") {
+            pendingStopVoiceAfterTurn = false;
+            stopVoicePipeline({ keepTts: true, keepState: false, keepInFlight: false });
+          } else {
+            void ensureVoiceListening("auto_continue");
+          }
         } catch (e) {
+          voiceTurnActive = false;
           stopAll("pipeline", `Something went wrong: ${safeErr(e)}`);
         }
       },
       onError(err) {
+        voiceTurnActive = false;
         stopAll("vad", `VAD error: ${err.message}`);
       },
     });
@@ -566,7 +585,12 @@ async function main() {
       ui.setMode(mode);
       ui.setError(null);
       if (mode === "text") {
-        // Stop mic pipeline, but keep any ongoing TTS playback.
+        // If we're mid voice turn (recording/ASR/LLM/TTS), don't drop it. Stop after turn completes.
+        if (voiceTurnActive || state === "listening" || inFlight || recorder?.isRecording?.()) {
+          pendingStopVoiceAfterTurn = true;
+          return;
+        }
+        // Otherwise stop mic pipeline immediately, but keep any ongoing TTS playback.
         stopVoicePipeline({ keepTts: true, keepState: state === "speaking", keepInFlight: true });
       } else {
         // Voice mode: never interrupt ongoing TTS; also don't start listening until TTS ends.
