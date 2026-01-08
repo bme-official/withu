@@ -142,7 +142,8 @@ async function main() {
         const a = new Audio(silentWav);
         a.preload = "auto";
         a.muted = false;
-        a.volume = 0.0;
+        // Use a tiny non-zero volume; some iOS versions are picky about 0.
+        a.volume = 0.001;
         (a as any).playsInline = true;
         const p = a.play();
         if (p && typeof (p as any).catch === "function") {
@@ -259,12 +260,23 @@ async function main() {
         let done = false;
         let raf: number | null = null;
         audio.preload = "auto";
+        // iOS Safari: hints to avoid fullscreen playback / improve reliability.
+        try {
+          (audio as any).playsInline = true;
+          audio.setAttribute?.("playsinline", "");
+          audio.setAttribute?.("webkit-playsinline", "");
+        } catch {}
         // Speaker mute should silence output but keep playback progressing.
         audio.muted = speakerMuted;
         audio.volume = speakerMuted ? 0.0 : 1.0;
-        const playPromise = audio.play();
-        if (playPromise && typeof (playPromise as any).catch === "function") {
-          await playPromise;
+        try {
+          const playPromise = audio.play();
+          if (playPromise && typeof (playPromise as any).catch === "function") {
+            await playPromise;
+          }
+        } catch (e) {
+          void api.log("audio_play_failed", { message: safeErr(e) });
+          throw e;
         }
         // Stream text display along with playback progress (best-effort).
         if (stream) {
@@ -386,7 +398,18 @@ async function main() {
 
   async function speak(text: string, stream?: { setProgress(ratio: number): void; finish(): void }) {
     // Ensure VAD is never running while speaking (stop first, then proceed).
-    if (speakerMuted) void api.log("tts_muted", { len: text.length });
+    if (speakerMuted) {
+      void api.log("tts_muted", { len: text.length });
+      // Inform user once in a while (mobile often looks like "no reply").
+      const now = Date.now();
+      if (now - lastAudioHintAt > 3500) {
+        lastAudioHintAt = now;
+        ui.setError("Speaker is muted.");
+        window.setTimeout(() => ui.setError(null), 2000);
+      }
+      // Silent completion (text still finishes).
+      return await speakWithServerTts(text, stream);
+    }
     const res = await speakWithServerTts(text, stream);
     if (res) return res;
     // Fallback: if server TTS fails, try Web Speech so the user still hears something.
