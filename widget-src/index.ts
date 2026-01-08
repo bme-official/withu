@@ -244,6 +244,10 @@ async function main() {
       }
       return { ttsMs: msSince(t0) };
     } catch {
+      // If TTS fails (network/provider/autoplay), still show the full text.
+      try {
+        stream?.finish();
+      } catch {}
       return null;
     }
   }
@@ -326,8 +330,9 @@ async function main() {
     if (!hasConsent()) return;
     if (inFlight) return;
     if (state !== "idle") return;
-    // Requirement: greet first, then start listening.
-    if (!bootGreetingSpoken) return;
+    // Don't block voice chat if greeting audio can't play (e.g. speaker muted / autoplay blocked).
+    // We still try to greet, but we allow listening once the greeting is at least displayed.
+    if (!bootGreetingDisplayed && !bootGreetingSpoken) return;
     // If currently playing audio, do not start listening (wait until it finishes).
     if (currentAudio) return;
     if (pendingStopVoiceAfterTurn) return;
@@ -519,7 +524,6 @@ async function main() {
   async function maybeBootGreet(reason: string) {
     if (bootGreetingSpoken) return;
     if (!api.sessionId) return;
-    if (speakerMuted) return;
     // Prevent double playback when multiple triggers fire close together.
     if (bootGreetingInFlight) return await bootGreetingInFlight;
 
@@ -529,6 +533,14 @@ async function main() {
         bootGreetingDisplayed = true;
         // Requirement: keep the greeting in the chat log.
         ui.appendMessage("assistant", bootGreetingText);
+      }
+
+      // If speaker is muted, treat greeting as "done" (no audio), and allow conversation to proceed.
+      if (speakerMuted) {
+        bootGreetingSpoken = true;
+        setState("idle");
+        void ensureVoiceListening("boot_greet_muted");
+        return;
       }
 
       // Stop listening while greeting to avoid feedback.
