@@ -56,35 +56,62 @@ export async function POST(req: NextRequest) {
     let meta: any = { ttsMs: 0, bytes: 0 };
 
     if (provider === "elevenlabs") {
-      const apiKey = (env.ELEVENLABS_API_KEY || "").trim();
-      const voiceId = String((prof as any)?.eleven_voice_id ?? "").trim();
-      const modelId = String((prof as any)?.eleven_model_id ?? env.ELEVENLABS_TTS_MODEL ?? "eleven_multilingual_v2").trim();
-      if (!apiKey) throw new Error("missing_ELEVENLABS_API_KEY");
-      if (!voiceId) throw new Error("missing_eleven_voice_id");
+      try {
+        const apiKey = (env.ELEVENLABS_API_KEY || "").trim();
+        const voiceId = String((prof as any)?.eleven_voice_id ?? "").trim();
+        const modelId = String((prof as any)?.eleven_model_id ?? env.ELEVENLABS_TTS_MODEL ?? "eleven_multilingual_v2").trim();
+        if (!apiKey) throw new Error("missing_ELEVENLABS_API_KEY");
+        if (!voiceId) throw new Error("missing_eleven_voice_id");
 
-      // optimize_streaming_latency improves time-to-first-audio
-      const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?optimize_streaming_latency=2`;
-      const voice_settings = pickElevenVoiceSettings(prof as any);
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "xi-api-key": apiKey,
-          accept: "audio/mpeg",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          text: input,
-          model_id: modelId || undefined,
-          voice_settings,
-        }),
-      });
-      if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        throw new Error(`elevenlabs_tts_failed_http_${res.status}: ${t.slice(0, 300)}`);
+        // optimize_streaming_latency improves time-to-first-audio
+        const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?optimize_streaming_latency=2`;
+        const voice_settings = pickElevenVoiceSettings(prof as any);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            accept: "audio/mpeg",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            text: input,
+            model_id: modelId || undefined,
+            voice_settings,
+          }),
+        });
+        if (!res.ok) {
+          const t = await res.text().catch(() => "");
+          throw new Error(`elevenlabs_tts_failed_http_${res.status}: ${t.slice(0, 300)}`);
+        }
+        buf = Buffer.from(await res.arrayBuffer());
+        const ttsMs = Math.round(performance.now() - t0);
+        meta = { mode: "server_elevenlabs", voiceId, modelId, ttsMs, bytes: buf.length };
+      } catch (e) {
+        // If ElevenLabs fails (quota, voice not found, etc.), fallback to OpenAI to keep UX reliable on mobile.
+        const elevenErr = e instanceof Error ? e.message : String(e);
+        const hasOpenAiKey = Boolean((env as any).OPENAI_API_KEY && String((env as any).OPENAI_API_KEY).trim());
+        if (!hasOpenAiKey) throw e;
+
+        let model: OpenAiTtsModel = getTtsModel() as OpenAiTtsModel;
+        let voice: OpenAiTtsVoice = getTtsVoice();
+        const speech = await getOpenAI().audio.speech.create({
+          model,
+          voice,
+          input,
+          response_format: "mp3",
+        });
+        buf = Buffer.from(await (speech as any).arrayBuffer());
+        const ttsMs = Math.round(performance.now() - t0);
+        meta = {
+          mode: "server_openai_fallback",
+          fallbackFrom: "elevenlabs",
+          elevenError: elevenErr,
+          model,
+          voice,
+          ttsMs,
+          bytes: buf.length,
+        };
       }
-      buf = Buffer.from(await res.arrayBuffer());
-      const ttsMs = Math.round(performance.now() - t0);
-      meta = { mode: "server_elevenlabs", voiceId, modelId, ttsMs, bytes: buf.length };
     } else {
       let model: OpenAiTtsModel = getTtsModel() as OpenAiTtsModel;
       let voice: OpenAiTtsVoice = getTtsVoice();
