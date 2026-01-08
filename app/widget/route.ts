@@ -11,8 +11,8 @@ export async function GET() {
     status: 200,
     headers: {
       "content-type": "application/javascript; charset=utf-8",
-      // short caching to allow fast updates while still being cache-friendly
-      "cache-control": "public, max-age=60",
+      // Debug-friendly: avoid sticky caching on mobile Safari.
+      "cache-control": "no-store",
     },
   });
 }

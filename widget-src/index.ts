@@ -185,6 +185,27 @@ async function main() {
     return /HTTP\s+(429|500|502|503)\b/.test(m) || /rate_limited|timeout/i.test(m);
   }
 
+  async function playTestBeep(): Promise<boolean> {
+    try {
+      // Short beep (WAV) for device audio verification.
+      const b64 =
+        "UklGRiQKAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAKAAAAAC8AkQDCAG0Ajv+L/gD+bP7W/7EBEgMhA5gB//6B/Gf7bvxa/+8CegWgBQ0Dwv6t+s34O/qL/uIDxAc4CMkE2P4S+Tr22Pds/YkE5wnhCsUGQv+497fzTfX/++AE3AuUDf8IAACj9krxoPJG+uUEng1JEG8LEQHY9fzu2O9G+JUEJQ/4EhEOdAJa9dTs/ewD9vADbBCZFd0QKAQu9dnqF+qo8+MCzBD+FqQSuwUx9ifrr+l18nIBxQ/cFnQTHweF98/rXulQ8QAAsA6iFjEUewjh+IzsJOk78I7+iw1RFtkUzwlF+lztAuk07x39WAzpFWwVGQuv+z/u9ug/7q/7GQtsFekVWAwd/TTvAulc7UX6zwnZFFEWiw2O/jvwJOmM7OH4ewgxFKIWsA4AAFDxXunP64X3Hwd0E9wWxQ9yAXXyr+kn6zH2uwWkEv4WzBDjAqjzF+qU6uf0UQTBEQoXwRFRBOf0lOoX6qjz4wLMEP4WpBK7BTH2J+uv6XXycgHFD9wWdBMfB4X3z+te6VDxAACwDqIWMRR7COH4jOwk6Tvwjv6LDVEW2RTPCUX6XO0C6TTvHf1YDOkVbBUZC6/7P+726D/ur/sZC2wV6RVYDB39NO8C6VztRfrPCdkUURaLDY7+O/Ak6Yzs4fh7CDEUohawDgAAUPFe6c/rhfcfB3QT3BbFD3IBdfKv6SfrMfa7BaQS/hbMEOMCqPMX6pTq5/RRBMERChfBEVEE5/SU6hfqqPPjAswQ/hakErsFMfYn66/pdfJyAcUP3BZ0Ex8HhffP617pUPEAALAOohYxFHsI4fiM7CTpO/CO/osNURbZFM8JRfpc7QLpNO8d/VgM6RVsFRkLr/s/7vboP+6v+xkLbBXpFVgMHf007wLpXO1F+s8J2RRRFosNjv478CTpjOzh+HsIMRSiFrAOAABQ8V7pz+uF9x8HdBPcFsUPcgF18q/pJ+sx9rsFpBL+FswQ4wKo8xfqlOrn9FEEwREKF8ERUQTn9JTqF+qo8+MCzBD+FqQSuwUx9ifrr+l18nIBxQ/cFnQTHweF98/rXulQ8QAAsA6iFjEUewjh+IzsJOk78I7+iw1RFtkUzwlF+lztAuk07x39WAzpFWwVGQuv+z/u9ug/7q/7GQtsFekVWAwd/TTvAulc7UX6zwnZFFEWiw2O/jvwJOmM7OH4ewgxFKIWsA4AAFDxXunP64X3Hwd0E9wWxQ9yAXXyr+kn6zH2uwWkEv4WzBDjAqjzF+qU6uf0UQTBEQoXwRFRBOf0lOoX6qjz4wLMEP4WpBK7BTH2J+uv6XXycgHFD9wWdBMfB4X3z+te6VDxAACwDqIWMRR7COH4jOwk6Tvwjv6LDVEW2RTPCUX6XO0C6TTvHf1YDMYVJxXkCsr7ze7T6Qbv5vt6ChUUaBRrC1n9rfAp6zrv4fq1CF8ShxPEC8H+f/KS7JbvCvoNB6gQiBLvCwAAQPQJ7hrwYPmFBfQObhHtCxYB7vWL78Lw4/geBEgNPRDCCwECg/cT8YrxlPjcAqYL+g5uC8EC/vid8nHycPjAARQKpw3zClUDXPol9HPzePjMAJMISQxWCr0Dmvun9Yv0qPgAACkH5AqXCfoDtfwg97f1APle/9cFfAm7CAwErP2L+PL2fvnm/qEEFAjEB/QDff7m+Tn4H/qZ/ooDsga2BrQDJ/8s+4j54Pp2/pMCWAWUBU0DqP9a/Nv6v/t9/sABCgRjBMECAABu/S78uPyt/hEBzAIlAxICLgBk/n39yf0F/4oAogHeAUIBMwA6/8T+7v6E/ykAjgCTAFUADgDu/wAA";
+      const a = new Audio(`data:audio/wav;base64,${b64}`);
+      a.preload = "auto";
+      a.muted = false;
+      a.volume = 1.0;
+      (a as any).playsInline = true;
+      a.setAttribute?.("playsinline", "");
+      a.setAttribute?.("webkit-playsinline", "");
+      const p = a.play();
+      if (p && typeof (p as any).catch === "function") await p;
+      return true;
+    } catch (e) {
+      void api.log("test_audio_failed", { message: safeErr(e) });
+      return false;
+    }
+  }
+
   function stripEmojis(text: string): string {
     try {
       return text.replace(/[\p{Extended_Pictographic}\uFE0F]/gu, "").replace(/\s{2,}/g, " ").trim();
@@ -743,6 +764,13 @@ async function main() {
         }
       } catch {}
       if (!speakerMuted) void maybeBootGreet("speaker_unmute");
+    },
+    async onTestAudio() {
+      ui.setError(null);
+      await unlockAudioOnce("test_audio");
+      const ok = await playTestBeep();
+      ui.setError(ok ? "Test sound played." : "Test sound failed. Check iPhone silent mode / Bluetooth.");
+      window.setTimeout(() => ui.setError(null), 2500);
     },
     onAcceptConsent() {
       localStorage.setItem(STORAGE_KEYS.consent, "accepted");

@@ -10,6 +10,7 @@ export type UiCallbacks = {
   onSendText(text: string): void;
   onToggleMicMuted(muted: boolean): void;
   onToggleSpeakerMuted(muted: boolean): void;
+  onTestAudio?(): void;
   onAcceptConsent(): void;
   onRejectConsent(): void;
 };
@@ -160,6 +161,7 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
         padding-bottom: calc(16px + env(safe-area-inset-bottom));
       }
       .page .footerControls { display: flex; }
+      .page .testAudioBtn { display: inline-flex; }
 
       /* Voice mode: hero avatar should fill the entire hero area (full-bleed) */
       .page .panel.voiceOnly .heroAvatar { width: 100%; height: 100%; }
@@ -189,6 +191,22 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
       /* iOS Safari: prevent focus-zoom by keeping inputs >= 16px */
       textarea { font-size: 16px; }
       button { font-size: 16px; }
+    }
+    .testAudioBtn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      height: 44px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: white;
+      font-weight: 700;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      flex: none;
     }
     .header {
       display:flex; align-items:center; justify-content:space-between;
@@ -737,9 +755,17 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
   footerMuteGroup.appendChild(footerMicMuteBtn);
   footerMuteGroup.appendChild(footerSpeakerMuteBtn);
 
+  const testAudioBtn = document.createElement("div");
+  testAudioBtn.className = "testAudioBtn";
+  testAudioBtn.setAttribute("role", "button");
+  testAudioBtn.setAttribute("tabindex", "0");
+  testAudioBtn.setAttribute("aria-label", "test audio");
+  testAudioBtn.textContent = "Test";
+
   const footerMode = createModeSwitch();
 
   footerControls.appendChild(footerMuteGroup);
+  footerControls.appendChild(testAudioBtn);
   footerControls.appendChild(footerMode.root);
 
   const error = document.createElement("div");
@@ -966,6 +992,18 @@ export function createUi(cb: UiCallbacks, opts?: { layout?: UiLayout }): UiContr
     if (ev.key === "Enter" || ev.key === " ") {
       ev.preventDefault();
       footerSpeakerMuteBtn.click();
+    }
+  });
+
+  function fireTestAudio() {
+    if (!cb.onTestAudio) return;
+    cb.onTestAudio();
+  }
+  testAudioBtn.addEventListener("click", fireTestAudio);
+  testAudioBtn.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      fireTestAudio();
     }
   });
 
