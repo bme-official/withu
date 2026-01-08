@@ -41,6 +41,12 @@ function clampInt(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(n)));
 }
 
+function clampMaybeNumber(v: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return clampInt(n, min, max);
+}
+
 function detectNegativeSignals(text: string): { spam: boolean; rude: boolean; harassment: boolean } {
   const t = text.trim();
   const lower = t.toLowerCase();
@@ -176,10 +182,15 @@ export async function POST(req: NextRequest) {
     ];
 
     const t0 = performance.now();
+    const maxTokens =
+      inputMode === "voice"
+        ? clampMaybeNumber((siteProfile as any)?.chat_config?.chat?.max_tokens_voice, 60, 220, 110)
+        : clampMaybeNumber((siteProfile as any)?.chat_config?.chat?.max_tokens_text, 80, 320, 160);
+
     const chatResp = await getOpenAI().chat.completions.create({
       model,
       messages: chatMessages,
-      max_tokens: 160,
+      max_tokens: maxTokens,
       temperature: 0.45,
       presence_penalty: 0.2,
       frequency_penalty: 0.2,

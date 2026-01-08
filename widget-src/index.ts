@@ -125,6 +125,7 @@ async function main() {
   let bootGreetingText: string | null = null;
   let bootGreetingDisplayed = false;
   let bootGreetingSpoken = false;
+  let bootGreetingInFlight: Promise<void> | null = null;
   let intimacyLevel: number | null = null;
 
   function stripEmojis(text: string): string {
@@ -509,32 +510,41 @@ async function main() {
     if (bootGreetingSpoken) return;
     if (!api.sessionId) return;
     if (speakerMuted) return;
+    // Prevent double playback when multiple triggers fire close together.
+    if (bootGreetingInFlight) return await bootGreetingInFlight;
 
-    if (!bootGreetingText) bootGreetingText = await getBootGreeting(reason);
-    if (!bootGreetingDisplayed) {
-      bootGreetingDisplayed = true;
-      // Requirement: keep the greeting in the chat log.
-      ui.appendMessage("assistant", bootGreetingText);
-    }
+    bootGreetingInFlight = (async () => {
+      if (!bootGreetingText) bootGreetingText = await getBootGreeting(reason);
+      if (!bootGreetingDisplayed) {
+        bootGreetingDisplayed = true;
+        // Requirement: keep the greeting in the chat log.
+        ui.appendMessage("assistant", bootGreetingText);
+      }
 
-    // Stop listening while greeting to avoid feedback.
-    try {
-      vad?.stop({ stopStream: false });
-    } catch {}
-    vad = null;
+      // Stop listening while greeting to avoid feedback.
+      try {
+        vad?.stop({ stopStream: false });
+      } catch {}
+      vad = null;
 
-    setState("speaking");
-    void api.log("boot_greet_start", { reason, intimacyLevel: intimacyLevel ?? null });
-    const res = await speak(bootGreetingText);
-    void api.log("boot_greet_end", { reason, ok: Boolean(res) });
-    // If autoplay is blocked (no user gesture yet), res can be null; we'll retry on gesture.
-    if (!res) {
+      setState("speaking");
+      void api.log("boot_greet_start", { reason, intimacyLevel: intimacyLevel ?? null });
+      const res = await speak(bootGreetingText);
+      void api.log("boot_greet_end", { reason, ok: Boolean(res) });
+      // If autoplay is blocked (no user gesture yet), res can be null; we'll retry on gesture.
+      if (!res) {
+        setState("idle");
+        return;
+      }
+      bootGreetingSpoken = true;
       setState("idle");
-      return;
-    }
-    bootGreetingSpoken = true;
-    setState("idle");
-    void ensureVoiceListening("boot_greet_done");
+      void ensureVoiceListening("boot_greet_done");
+    })()
+      .finally(() => {
+        bootGreetingInFlight = null;
+      });
+
+    return await bootGreetingInFlight;
   }
 
   const ui = createUi(
