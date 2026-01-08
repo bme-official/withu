@@ -321,7 +321,17 @@ async function main() {
   async function speak(text: string, stream?: { setProgress(ratio: number): void; finish(): void }) {
     // Ensure VAD is never running while speaking (stop first, then proceed).
     if (speakerMuted) void api.log("tts_muted", { len: text.length });
-    return await speakWithServerTts(text, stream);
+    const res = await speakWithServerTts(text, stream);
+    if (res) return res;
+    // Fallback: if server TTS fails, try Web Speech so the user still hears something.
+    try {
+      const ws = await speakWithWebSpeech(text, ttsVoiceHint);
+      void api.log("tts_fallback_webspeech", { ok: Boolean(ws) });
+      return ws;
+    } catch (e) {
+      void api.log("tts_fallback_webspeech_error", { message: safeErr(e) });
+      return null;
+    }
   }
 
   async function ensureVoiceListening(reason: string) {
